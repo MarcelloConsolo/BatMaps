@@ -149,7 +149,15 @@
                 const res = determinaDati();
                 let vProv = (vProvOrig && vProvOrig !== "-") ? vProvOrig : res.prov;
                 let vComDisp = (vComRaw && vComRaw !== "-") ? vComRaw : res.nome;
+
+                // PULIZIA VISIVA: Rimuoviamo il nome del comune dalla località per il display
                 let vLocDisp = cap(vLocRaw);
+                if (vComDisp && vComDisp !== "-") {
+                    vLocDisp = vLocDisp.replace(new RegExp(vComDisp, 'gi'), '')
+                                     .replace(/,/g, '')
+                                     .trim();
+                    if (!vLocDisp) vLocDisp = "-";
+                }
 
                 let vData = "-";
                 if (vDataRaw) {

@@ -204,14 +204,13 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
             
             val dataFull = if (oRaw.isNotBlank() && oRaw != "-") "Segnalazione del $dRaw alle ore $oRaw" else "Segnalazione del $dRaw"
             
-            val localita = formatter.formatCellValue(row.getCell(colMap["loc"] ?: -1)).trim()
-                .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+            val localitaRaw = formatter.formatCellValue(row.getCell(colMap["loc"] ?: -1)).trim()
             val comuneRaw = formatter.formatCellValue(row.getCell(colMap["comune"] ?: -1)).trim()
                 .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
             val provinciaRaw = formatter.formatCellValue(row.getCell(colMap["prov"] ?: -1)).trim()
 
             // Ottieni dati dal database basato sulla priorità: Comune -> Località -> Provincia
-            val res = ComuniDatabase.cercaDati(comuneRaw, localita, provinciaRaw)
+            val res = ComuniDatabase.cercaDati(comuneRaw, localitaRaw, provinciaRaw)
             
             // Se il comune nell'Excel è vuoto o "-", ma abbiamo trovato un comune nel testo della località, usiamolo!
             val comuneDisplay = if (comuneRaw.isBlank() || comuneRaw == "-") {
@@ -219,6 +218,16 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
             } else {
                 comuneRaw
             }
+
+            // PULIZIA VISIVA: Rimuoviamo il nome del comune dalla stringa della località per il display
+            var localitaDisplay = localitaRaw
+            if (comuneDisplay.isNotBlank()) {
+                localitaDisplay = localitaDisplay.replace(comuneDisplay, "", ignoreCase = true)
+                    .replace(",", "")
+                    .trim()
+                    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+            }
+            if (localitaDisplay.isBlank()) localitaDisplay = "-"
 
             var lat = getCellDouble(row, colMap["lat"] ?: -1)
             var lon = getCellDouble(row, colMap["lon"] ?: -1)
@@ -232,7 +241,7 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
             val stato = formatter.formatCellValue(row.getCell(colMap["stato"] ?: -1)).ifBlank { "-" }
             val note = formatter.formatCellValue(row.getCell(colMap["note"] ?: -1)).ifBlank { "-" }
 
-            lista.add(Segnalazione(dataFull, specie.ifBlank { "Pipistrello" }, localita, comuneDisplay, res.prov, stato, note, lat, lon) to GeoPoint(lat, lon))
+            lista.add(Segnalazione(dataFull, specie.ifBlank { "Pipistrello" }, localitaDisplay, comuneDisplay, res.prov, stato, note, lat, lon) to GeoPoint(lat, lon))
         }
         workbook.close()
     } catch (e: Exception) { Log.e("BatMaps", "Errore: ${e.message}") }

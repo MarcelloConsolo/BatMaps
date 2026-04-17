@@ -153,10 +153,13 @@
                 // PULIZIA VISIVA: Rimuoviamo il nome del comune dalla località per il display
                 let vLocDisp = cap(vLocRaw);
                 if (vComDisp && vComDisp !== "-") {
-                    vLocDisp = vLocDisp.replace(new RegExp(vComDisp, 'gi'), '')
+                    // Crea una versione "pulita" del nome comune per la ricerca (es. rimuove " (PD)")
+                    let searchName = vComDisp.split('(')[0].trim();
+                    vLocDisp = vLocDisp.replace(new RegExp(searchName, 'gi'), '')
                                      .replace(/,/g, '')
                                      .trim();
                     if (!vLocDisp) vLocDisp = "-";
+                    vLocDisp = cap(vLocDisp);
                 }
 
                 let vData = "-";

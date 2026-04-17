@@ -16,7 +16,8 @@
         #map { height: 100vh; width: 100%; }
         #overlay {
             position: fixed; top: 15px; right: 15px;
-            background: white; padding: 15px; border-radius: 10px;
+            background: white; padding: 15px;
+            border-radius: 10px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             z-index: 1000;
             border-left: 5px solid #2980b9;
@@ -37,7 +38,6 @@
     <b style="font-size:1.2em; color:#2c3e50;">BatMaps 2025</b><br>
     <div id="status" style="color:#7f8c8d;font-size:0.9em;margin:5px 0;">Sincronizzazione Excel...</div>
     <div id="counter" style="font-size:1.2em;font-weight:bold;color:#27ae60;margin-bottom:10px;"></div>
-    <div id="filter-container" style="display:none;"></div>
 </div>
 
 <div id="map"></div>
@@ -149,23 +149,28 @@ async function init() {
             let lat = parseFloat(String(row[c.lat]||"").replace(",","."));
             let lon = parseFloat(String(row[c.lon]||"").replace(",","."));
 
-            // 🔥 FIX IMPORTANTE: niente random, solo fallback reale
             if (isNaN(lat) || isNaN(lon)) {
                 const key = vComRaw.toLowerCase().trim();
                 if (dbComuni[key]) {
                     lat = dbComuni[key].lat;
                     lon = dbComuni[key].lon;
                 } else {
-                    return; // NON creare marker se non localizzabile
+                    return; // nessun marker se non localizzabile
                 }
             }
+
+            // ✔ FIX LOCALITÀ (qui la correzione richiesta)
+            const safeLoc =
+                (vLocRaw && vLocRaw.trim() !== "")
+                    ? vLocRaw
+                    : (vComRaw || "");
 
             const marker = L.marker([lat, lon]).bindPopup(`
                 <div style="min-width:210px">
                     <span class="specie-title">${vSpecie}</span>
                     <div class="date-subtitle">Segnalazione del ${vData} ${vOra ? "ore "+vOra : ""}</div>
                     <table class="popup-table">
-                        <tr><td class="label">Località:</td><td class="valore">${vLocRaw||""}</td></tr>
+                        <tr><td class="label">Località:</td><td class="valore">${safeLoc}</td></tr>
                         <tr><td class="label">Comune:</td><td class="valore">${vComRaw||""}</td></tr>
                         <tr><td class="label">Provincia:</td><td class="valore">${vProv||""}</td></tr>
                         <tr><td class="label">Stato:</td><td class="valore">${String(row[c.stato]||"")}</td></tr>
@@ -174,7 +179,7 @@ async function init() {
                 </div>
             `);
 
-            allMarkers.push({ marker, lat, lon });
+            allMarkers.push({marker, lat, lon});
             markers.addLayer(marker);
         });
 

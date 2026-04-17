@@ -50,6 +50,12 @@
 <div id="map"></div>
 <script>
     const map = L.map('map').setView([45.4, 11.8], 8);
+const normalize = (str) =>
+    String(str || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
     function formatTime(val) {
@@ -102,33 +108,44 @@
                     return s.includes("speci") || s.includes("data");
                 })) { hIdx = i; break; }
             }
-            const header = rows[hIdx].map(h => String(h || "").toLowerCase().trim());
+            const header = rows[hIdx].map(h => normalize(h));
             const dataRows = rows.slice(hIdx + 1);
 
             const getCol = (targets) => {
-                for(let t of targets) {
-                    let idx = header.findIndex(h => h.includes(t));
-                    if(idx !== -1) return idx;
-                }
-                return -1;
-            };
+    targets = targets.map(t => normalize(t));
 
+    for (let i = 0; i < header.length; i++) {
+        for (let t of targets) {
+            if (header[i] && header[i].includes(t)) return i;
+        }
+    }
+    return -1;
+};
             const c = {
-                specie: getCol(["specie"]),
-                data: getCol(["data"]),
-                ora: getCol(["ora"]),
-                loc: getCol(["localit"]),
-                com: getCol(["comune"]),
-                prov: getCol(["provin"]),
-                stato: getCol(["stato"]),
-                note: getCol(["condizioni", "note"]),
-                lat: getCol(["latitud"]),
-                lon: getCol(["longitud"])
-            };
-
+    specie: getCol(["specie animale"]),
+    data: getCol(["data segnalazione"]),
+    ora: getCol(["ora"]),
+    loc: getCol(["localita"]),
+    com: getCol(["comune"]),
+    note: getCol(["condizioni al recupero"]),
+    prov: getCol(["provincia"]),
+    stato: getCol(["stato"]),
+    lat: getCol(["latitudine"]),
+    lon: getCol(["longitudine"])
+};
             const markers = L.markerClusterGroup();
             let allMarkers = [];
+const getVal = (row, idx) => {
+    if (idx === -1) return "⚠️";
 
+    let val = row[idx];
+
+    if (val == null) return "-";
+
+    val = String(val).trim();
+
+    return val === "" ? "-" : val;
+};
             dataRows.forEach(row => {
                 if (!row || row.length < 2) return;
 

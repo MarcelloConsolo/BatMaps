@@ -34,7 +34,8 @@ def genera():
     }
 
     input_path = 'comuni_db_extracted/FREE/italy_cities.json'
-    output_path = 'app/src/main/assets/comuni_italiani.json'
+    output_path_app = 'app/src/main/assets/comuni_italiani.json'
+    output_path_web = 'web/comuni_italiani.json'
 
     if not os.path.exists(input_path):
         print(f"Errore: {input_path} non trovato")
@@ -49,11 +50,11 @@ def genera():
         prov = str(c['provincia']).upper().strip()
 
         # Default coords based on province capoluogo
-        lat, lon = coords_base.get(prov, (45.5479, 11.5446)) # Fallback Vicenza
+        lat, lon = coords_base.get(prov, (45.5479, 11.5446))
 
-        # Se abbiamo match esatto per il capoluogo, usiamo le sue coordinate
-        if nome in ['vicenza', 'padova', 'verona', 'venezia', 'treviso', 'belluno', 'rovigo', 'modena', 'milano', 'roma']:
-            lat, lon = coords_base[prov]
+        # Match per capoluogo specifico per precisione massima
+        if nome in ['vicenza', 'padova', 'verona', 'venezia', 'treviso', 'belluno', 'rovigo', 'modena', 'milano', 'roma', 'bergamo', 'ragusa']:
+            lat, lon = coords_base.get(prov, (lat, lon))
 
         data[nome] = {
             'prov': prov,
@@ -63,11 +64,12 @@ def genera():
             'lon': lon
         }
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    for out in [output_path_app, output_path_web]:
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        with open(out, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
-    print(f"✅ Generato {output_path} con {len(data)} comuni.")
+    print(f"✅ Generato database in App e Web con {len(data)} comuni.")
 
 if __name__ == "__main__":
     genera()

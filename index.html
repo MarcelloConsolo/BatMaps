@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <title>BatMaps 2025 - Fuzzy Geolocation</title>
+    <title>BatMaps 2025 - Stable</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
@@ -9,27 +9,18 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
     <style>
-        body { margin:0; padding:0; font-family:sans-serif; background:#f4f7f6; }
-        #map { height:100vh; width:100%; }
+        body { margin:0; font-family:sans-serif; }
+        #map { height:100vh; }
         #overlay {
             position:fixed; top:15px; right:15px;
             background:white; padding:15px;
             border-radius:10px;
             box-shadow:0 4px 15px rgba(0,0,0,0.2);
             z-index:1000;
-            border-left:5px solid #2980b9;
-            width:230px;
         }
-        .popup-table { font-size:13px; border-collapse:collapse; width:100%; margin-top:5px; }
-        .popup-table td { padding:5px 0; border-bottom:1px solid #eee; }
-        .label { font-weight:bold; color:#7f8c8d; width:90px; }
-        .valore { color:#2c3e50; font-weight:500; }
-        .specie-title { color:#2980b9; font-size:1.2em; font-weight:bold; display:block; }
-        .date-subtitle { font-size:0.85em; color:#95a5a6; font-style:italic; margin-bottom:8px; }
     </style>
 </head>
 
@@ -47,170 +38,111 @@
 const map = L.map('map').setView([45.4, 11.8], 8);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-/* =========================
-   NORMALIZZAZIONE FORTE
-========================= */
-const normalizeKey = (str) =>
-    String(str || "")
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9\s]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
+/* NORMALIZE */
+const norm = s => String(s||"")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9 ]/g," ")
+    .replace(/\s+/g," ")
+    .trim();
 
-/* =========================
-   LEVENSHTEIN DIST (fuzzy)
-========================= */
-function levenshtein(a, b) {
-    const matrix = Array.from({ length: b.length + 1 }, () => []);
+/* LEVENSHTEIN */
+function lev(a,b){
+    const m=[];
+    for(let i=0;i<=b.length;i++){m[i]=[i]}
+    for(let j=0;j<=a.length;j++){m[0][j]=j}
+    for(let i=1;i<=b.length;i++){
+        for(let j=1;j<=a.length;j++){
+            m[i][j]=b[i-1]==a[j-1]?m[i-1][j-1]:
+                Math.min(m[i-1][j-1]+1,m[i][j-1]+1,m[i-1][j]+1)
+        }
+    }
+    return m[b.length][a.length]
+}
 
-    for (let i = 0; i <= b.length; i++) matrix[i][0] = i;
-    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+function fuzzy(key,index){
+    if(index[key]) return index[key]
+    let best=null,score=3
+    for(let k in index){
+        let d=lev(key,k)
+        if(d<score){score=d;best=index[k]}
+    }
+    return best
+}
 
-    for (let i = 1; i <= b.length; i++) {
-        for (let j = 1; j <= a.length; j++) {
-            if (b[i - 1] === a[j - 1]) {
-                matrix[i][j] = matrix[i - 1][j - 1];
+async function init(){
+    const db=await (await fetch('web/comuni_italiani.json')).json()
+
+    const idx={}
+    for(let k in db){ idx[norm(k)]=db[k] }
+
+    const file=await (await fetch('web/Pipistrelli 2025.xlsx?v='+Date.now())).arrayBuffer()
+    const wb=XLSX.read(new Uint8Array(file),{type:'array'})
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1})
+
+    const header=rows[0].map(h=>String(h).toLowerCase())
+    const data=rows.slice(1)
+
+    const col=t=>header.findIndex(h=>t.some(x=>h.includes(x)))
+
+    const c={
+        specie:col(["specie"]),
+        com:col(["comune"]),
+        loc:col(["localita"]),
+        prov:col(["provincia"]),
+        stato:col(["stato"]),
+        note:col(["condizioni"]),
+        lat:col(["lat"]),
+        lon:col(["lon"])
+    }
+
+    const cluster=L.markerClusterGroup()
+    let count=0
+
+    data.forEach(r=>{
+        if(!r) return
+
+        const comRaw=String(r[c.com]||"").trim()
+        const locRaw=String(r[c.loc]||"").trim()
+
+        const key=norm(comRaw)
+        const match=idx[key] || fuzzy(key,idx)
+
+        let lat=parseFloat(String(r[c.lat]||"").replace(",","."))
+        let lon=parseFloat(String(r[c.lon]||"").replace(",","."))
+
+        if(isNaN(lat)||isNaN(lon)){
+            if(match){
+                lat=match.lat
+                lon=match.lon
             } else {
-                matrix[i][j] = Math.min(
-                    matrix[i - 1][j - 1] + 1,
-                    matrix[i][j - 1] + 1,
-                    matrix[i - 1][j] + 1
-                );
+                lat=45.5
+                lon=11.5
             }
         }
-    }
-    return matrix[b.length][a.length];
+
+        const locDisplay = locRaw && locRaw !== comRaw ? locRaw : (locRaw || comRaw)
+
+        const marker=L.marker([lat,lon]).bindPopup(`
+            <b>${r[c.specie]||"Pipistrello"}</b><br>
+            Località: ${locDisplay}<br>
+            Comune: ${comRaw}<br>
+            Provincia: ${r[c.prov]||""}<br>
+            Stato: ${r[c.stato]||""}<br>
+            Condizioni: ${r[c.note]||""}
+        `)
+
+        cluster.addLayer(marker)
+        count++
+    })
+
+    map.addLayer(cluster)
+    document.getElementById("counter").innerText="Totale: "+count
+    document.getElementById("status").innerText="OK"
 }
 
-/* =========================
-   FUZZY MATCH ENGINE
-========================= */
-function findComune(key, index) {
-    if (index[key]) return index[key];
-
-    let best = null;
-    let bestScore = 999;
-
-    for (let k in index) {
-        const dist = levenshtein(key, k);
-        if (dist < bestScore && dist <= 3) {
-            bestScore = dist;
-            best = index[k];
-        }
-    }
-
-    return best;
-}
-
-function formatTime(val) {
-    if (!val || val === "-") return "";
-    let s = String(val).trim();
-    let num = parseFloat(s.replace(",", "."));
-
-    if (!isNaN(num) && num > 0 && num < 1) {
-        let sec = Math.round(num * 24 * 3600);
-        let h = Math.floor(sec / 3600);
-        let m = Math.floor((sec % 3600) / 60);
-        return (h<10?"0":"")+h+":"+(m<10?"0":"")+m;
-    }
-
-    if (s.includes(":")) {
-        let p = s.split(":");
-        return p[0].padStart(2,'0') + ":" + p[1].padStart(2,'0');
-    }
-
-    return s;
-}
-
-async function init() {
-    let dbComuni = await (await fetch('web/comuni_italiani.json')).json();
-
-    /* =========================
-       INDICE NORMALIZZATO
-    ========================= */
-    const indexComuni = {};
-    for (let k in dbComuni) {
-        indexComuni[normalizeKey(k)] = dbComuni[k];
-    }
-
-    let response = await fetch('web/Pipistrelli 2025.xlsx?v=' + Date.now());
-    const data = new Uint8Array(await response.arrayBuffer());
-    const wb = XLSX.read(data, {type:'array'});
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, {header:1});
-
-    let hIdx = 0;
-    for (let i=0;i<rows.length&&i<20;i++) {
-        if (rows[i]?.some(c =>
-            String(c||"").toLowerCase().includes("speci") ||
-            String(c||"").toLowerCase().includes("data")
-        )) hIdx = i;
-    }
-
-    const header = rows[hIdx].map(h => String(h||"").toLowerCase());
-    const dataRows = rows.slice(hIdx+1);
-
-    const getCol = (t) => {
-        for (let i=0;i<header.length;i++)
-            for (let x of t)
-                if (header[i]?.includes(x)) return i;
-        return -1;
-    };
-
-    const c = {
-        specie: getCol(["specie animale"]),
-        data: getCol(["data segnalazione"]),
-        ora: getCol(["ora"]),
-        loc: getCol(["localita"]),
-        com: getCol(["comune"]),
-        prov: getCol(["provincia"]),
-        stato: getCol(["stato"]),
-        note: getCol(["condizioni al recupero"]),
-        lat: getCol(["latitudine"]),
-        lon: getCol(["longitudine"])
-    };
-
-    const cluster = L.markerClusterGroup();
-    let all = [];
-
-    dataRows.forEach(row => {
-        if (!row) return;
-
-        const comRaw = String(row[c.com]||"");
-        const key = normalizeKey(comRaw);
-
-        const match = findComune(key, indexComuni);
-        if (!match) return;
-
-        let lat = parseFloat(String(row[c.lat]||"").replace(",",".")) || match.lat;
-        let lon = parseFloat(String(row[c.lon]||"").replace(",",".")) || match.lon;
-
-        const marker = L.marker([lat, lon]).bindPopup(`
-            <div style="min-width:210px">
-                <b>${row[c.specie]||"Pipistrello"}</b><br>
-                <table class="popup-table">
-                    <tr><td class="label">Comune</td><td>${comRaw}</td></tr>
-                    <tr><td class="label">Provincia</td><td>${row[c.prov]||""}</td></tr>
-                    <tr><td class="label">Stato</td><td>${row[c.stato]||""}</td></tr>
-                    <tr><td class="label">Condizioni</td><td>${row[c.note]||""}</td></tr>
-                </table>
-            </div>
-        `);
-
-        cluster.addLayer(marker);
-        all.push([lat, lon]);
-    });
-
-    map.addLayer(cluster);
-    if (all.length) map.fitBounds(all);
-
-    document.getElementById("status").innerText = "OK";
-    document.getElementById("counter").innerText = "Totale: " + all.length;
-}
-
-init();
+init()
 </script>
 
 </body>

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <title>BatMaps 2025 - Versione 17.4</title>
+    <title>BatMaps 2025 - Versione 17.5</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -21,7 +21,7 @@
         }
         .popup-table { font-size: 13px; border-collapse: collapse; width: 100%; margin-top: 5px; }
         .popup-table td { padding: 5px 0; border-bottom: 1px solid #eee; vertical-align: top; }
-        .label { font-weight: bold; color: #7f8c8d; width: 85px; }
+        .label { font-weight: bold; color: #7f8c8d; width: 90px; }
         .valore { color: #2c3e50; font-weight: 500; }
         .specie-title { color: #2980b9; font-size: 1.2em; font-weight: bold; display: block; }
         .date-subtitle { font-size: 0.85em; color: #95a5a6; font-style: italic; margin-bottom: 8px; }
@@ -67,21 +67,20 @@
 
             const getCol = (targets) => {
                 for(let t of targets) { let idx = header.indexOf(t); if(idx !== -1) return idx; }
-                for(let t of targets) { let idx = header.findIndex(h => h.includes(t)); if(idx !== -1) return idx; }
                 return -1;
             };
 
             const c = {
-                specie: getCol(["specie"]),
-                data: getCol(["data"]),
+                specie: getCol(["specie animale", "specie"]),
+                data: getCol(["data segnalazione", "data"]),
                 ora: getCol(["ora"]),
                 loc: getCol(["località", "localit"]),
                 com: getCol(["comune"]),
                 prov: getCol(["provincia"]),
                 stato: getCol(["stato"]),
-                note: getCol(["condizioni", "note"]),
-                lat: getCol(["lat"]),
-                lon: getCol(["lon"])
+                note: getCol(["condizioni al recupero", "note", "condizioni"]),
+                lat: getCol(["latitudine", "lat"]),
+                lon: getCol(["longitudine", "lon"])
             };
 
             const markers = L.markerClusterGroup();
@@ -97,7 +96,7 @@
                 let vOra = row[c.ora] || "";
 
                 let rigaTesto = row.join(" ");
-                if (!vProv || vProv === "-" || vProv === "nan") vProv = getProvincia(rigaTesto);
+                if (!vProv || vProv === "-" || vProv === "nan" || vProv.length > 2) vProv = getProvincia(rigaTesto);
 
                 let vData = "-";
                 if (vDataRaw) {
@@ -126,7 +125,7 @@
                             <tr><td class="label">Comune:</td><td class="valore">${vCom}</td></tr>
                             <tr><td class="label">Provincia:</td><td class="valore">${vProv}</td></tr>
                             <tr><td class="label">Stato:</td><td class="valore">${getV(c.stato)}</td></tr>
-                            <tr><td class="label">Note:</td><td class="valore">${getV(c.note)}</td></tr>
+                            <tr><td class="label">Condizioni:</td><td class="valore">${getV(c.note)}</td></tr>
                         </table>
                     </div>`;
 

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <title>BatMaps 2025 - Versione 17.30</title>
+    <title>BatMaps 2025 - Versione 17.65 FIX</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -18,6 +18,7 @@
             background: white; padding: 15px; border-radius: 10px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 1000;
             border-left: 5px solid #2980b9;
+            width: 230px;
         }
         .popup-table { font-size: 13px; border-collapse: collapse; width: 100%; margin-top: 5px; }
         .popup-table td { padding: 5px 0; border-bottom: 1px solid #eee; vertical-align: top; }
@@ -25,34 +26,61 @@
         .valore { color: #2c3e50; font-weight: 500; }
         .specie-title { color: #2980b9; font-size: 1.2em; font-weight: bold; display: block; }
         .date-subtitle { font-size: 0.85em; color: #95a5a6; font-style: italic; margin-bottom: 8px; }
+        .filter-select { width: 100%; margin-bottom: 8px; padding: 6px; border-radius: 5px; border: 1px solid #ddd; font-size: 0.9em; }
     </style>
 </head>
 <body>
 <div id="overlay">
     <b style="font-size:1.2em; color: #2c3e50;">BatMaps 2025</b><br>
     <div id="status" style="color: #7f8c8d; font-size: 0.9em; margin: 5px 0;">Sincronizzazione Excel...</div>
-    <div id="counter" style="font-size: 1.2em; font-weight: bold; color: #27ae60;"></div>
+    <div id="counter" style="font-size: 1.2em; font-weight: bold; color: #27ae60; margin-bottom: 10px;"></div>
+
+    <div id="filter-container" style="display:none; border-top: 1px solid #eee; padding-top: 10px;">
+        <label style="font-size: 0.8em; color: #7f8c8d;">Regione:</label>
+        <select id="filter-region" class="filter-select">
+            <option value="">Tutte le Regioni</option>
+        </select>
+        <label style="font-size: 0.8em; color: #7f8c8d;">Provincia:</label>
+        <select id="filter-prov" class="filter-select">
+            <option value="">Tutte le Province</option>
+        </select>
+        <button id="reset-filters" style="width:100%; padding: 6px; cursor: pointer; background: #2980b9; color: white; border: none; border-radius: 5px; font-weight: bold;">Reset Filtri</button>
+    </div>
 </div>
 <div id="map"></div>
 <script>
-    const map = L.map('map').setView([42.0, 12.5], 6);
+    const map = L.map('map').setView([45.4, 11.8], 8);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
+    // ✅ NORMALIZE (fix accenti)
+    const normalize = (str) =>
+        String(str || "")
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .trim();
+
     function formatTime(val) {
-        if (!val) return "";
-        let num = parseFloat(String(val).replace(",", "."));
+        if (!val || val === "-") return "";
+        let s = String(val).trim();
+        let num = parseFloat(s.replace(",", "."));
         if (!isNaN(num) && num > 0 && num < 1) {
             let totalSeconds = Math.round(num * 24 * 3600);
             let hours = Math.floor(totalSeconds / 3600);
             let minutes = Math.floor((totalSeconds % 3600) / 60);
             return (hours < 10 ? "0" : "") + hours + ":" + (minutes < 10 ? "0" : "") + minutes;
         }
-        return String(val);
+        if (s.includes(":")) {
+            let parts = s.split(":");
+            return parts[0].padStart(2, '0') + ":" + parts[1].padStart(2, '0');
+        }
+        return s;
     }
+
+    const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : "-";
 
     async function init() {
         try {
-            // Carica il database dei comuni (cerca in entrambi i percorsi possibili)
             let dbComuni = {};
             try {
                 const dbResp = await fetch('web/comuni_italiani.json');
@@ -62,7 +90,6 @@
                 dbComuni = await dbResp.json();
             }
 
-            // Carica l'Excel (cerca in entrambi i percorsi possibili)
             let response;
             try {
                 response = await fetch('web/Pipistrelli 2025.xlsx?v=' + Date.now());
@@ -83,13 +110,18 @@
                     return s.includes("speci") || s.includes("data");
                 })) { hIdx = i; break; }
             }
-            const header = rows[hIdx].map(h => String(h || "").toLowerCase().trim());
+
+            // ✅ HEADER NORMALIZZATO
+            const header = rows[hIdx].map(h => normalize(h));
             const dataRows = rows.slice(hIdx + 1);
 
+            // ✅ getCol robusto
             const getCol = (targets) => {
-                for(let t of targets) {
-                    let idx = header.findIndex(h => h.includes(t));
-                    if(idx !== -1) return idx;
+                targets = targets.map(t => normalize(t));
+                for (let i = 0; i < header.length; i++) {
+                    for (let t of targets) {
+                        if (header[i] && header[i].includes(t)) return i;
+                    }
                 }
                 return -1;
             };
@@ -98,18 +130,17 @@
                 specie: getCol(["specie"]),
                 data: getCol(["data"]),
                 ora: getCol(["ora"]),
-                loc: getCol(["localit"]),
+                loc: getCol(["localita"]),
                 com: getCol(["comune"]),
-                prov: getCol(["provin"]),
+                prov: getCol(["provincia", "prov"]),
                 stato: getCol(["stato"]),
                 note: getCol(["condizioni", "note"]),
-                lat: getCol(["latitud"]),
-                lon: getCol(["longitud"])
+                lat: getCol(["latitudine", "lat"]),
+                lon: getCol(["longitudine", "lon", "lng"])
             };
 
             const markers = L.markerClusterGroup();
-            let count = 0;
-            const bounds = [];
+            let allMarkers = [];
 
             dataRows.forEach(row => {
                 if (!row || row.length < 2) return;
@@ -119,48 +150,51 @@
                 if (!vSpecie && !vDataRaw) return;
 
                 let vComRaw = String(row[c.com] || "").trim();
-                let vLocRaw = String(row[c.loc] || "").trim();
+
+                // ✅ FIX LOCALITÀ
+                let vLocRaw = (c.loc !== -1 && row[c.loc] != null)
+                    ? String(row[c.loc]).trim()
+                    : "";
+
                 let vProvOrig = String(row[c.prov] || "").trim().toUpperCase();
                 let vOra = formatTime(row[c.ora]);
-
-                const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : "-";
 
                 function determinaDati() {
                     let vComLow = vComRaw.toLowerCase();
                     let vLocLow = vLocRaw.toLowerCase();
-
-                    if (vComLow && dbComuni[vComLow]) return { nome: vComRaw, prov: dbComuni[vComLow].prov, lat: dbComuni[vComLow].lat, lon: dbComuni[vComLow].lon };
-
+                    if (vComLow && dbComuni[vComLow]) return { nome: vComRaw, prov: dbComuni[vComLow].prov, reg: dbComuni[vComLow].reg, lat: dbComuni[vComLow].lat, lon: dbComuni[vComLow].lon };
                     for (let nome in dbComuni) {
-                        if (nome.length > 3 && vLocLow.includes(nome)) {
-                            return { nome: cap(nome), prov: dbComuni[nome].prov, lat: dbComuni[nome].lat, lon: dbComuni[nome].lon };
-                        }
+                        if (nome.length > 3 && vLocLow.includes(nome)) return { nome: cap(nome), prov: dbComuni[nome].prov, reg: dbComuni[nome].reg, lat: dbComuni[nome].lat, lon: dbComuni[nome].lon };
                     }
-
                     if (vProvOrig.length === 2) {
-                        const capoluoghi = {"PD":"padova","VI":"vicenza","VE":"venezia","VR":"verona","TV":"treviso","BL":"belluno","RO":"rovigo","MO":"modena","BG":"bergamo","RG":"ragusa","MI":"milano","RM":"roma"};
+                        const capoluoghi = {"PD":"padova","VI":"vicenza","VE":"venezia","VR":"verona","TV":"treviso","BL":"belluno","RO":"rovigo"};
                         const capKey = capoluoghi[vProvOrig];
-                        if (capKey && dbComuni[capKey]) return { nome: cap(capKey), prov: vProvOrig, lat: dbComuni[capKey].lat, lon: dbComuni[capKey].lon };
+                        if (capKey && dbComuni[capKey]) return { nome: cap(capKey), prov: vProvOrig, reg: dbComuni[capKey].reg, lat: dbComuni[capKey].lat, lon: dbComuni[capKey].lon };
                     }
-
-                    return { nome: "Vicenza", prov: "VI", lat: 45.5479, lon: 11.5446 };
+                    return { nome: "Vicenza", prov: "VI", reg: "Veneto", lat: 45.5479, lon: 11.5446 };
                 }
 
                 const res = determinaDati();
                 let vProv = (vProvOrig && vProvOrig !== "-") ? vProvOrig : res.prov;
                 let vComDisp = (vComRaw && vComRaw !== "-") ? vComRaw : res.nome;
+                let vReg = res.reg || "-";
 
-                // PULIZIA VISIVA: Rimuoviamo il nome del comune dalla località per il display
-                let vLocDisp = cap(vLocRaw);
+                // pulizia località
+                let vLocDisp = vLocRaw;
                 if (vComDisp && vComDisp !== "-") {
-                    // Crea una versione "pulita" del nome comune per la ricerca (es. rimuove " (PD)")
                     let searchName = vComDisp.split('(')[0].trim();
-                    vLocDisp = vLocDisp.replace(new RegExp(searchName, 'gi'), '')
-                                     .replace(/,/g, '')
-                                     .trim();
-                    if (!vLocDisp) vLocDisp = "-";
-                    vLocDisp = cap(vLocDisp);
+                    if (searchName.length > 3) {
+                        vLocDisp = vLocDisp.replace(new RegExp(searchName, 'gi'), '');
+                    }
                 }
+                vLocDisp = vLocDisp.replace(/^[,\s]+|[,\s]+$/g, '').trim();
+
+                // ✅ fallback intelligente
+                if (!vLocDisp || vLocDisp === "-") {
+                    vLocDisp = vComDisp !== "-" ? vComDisp : "Località sconosciuta";
+                }
+
+                vLocDisp = vLocDisp.charAt(0).toUpperCase() + vLocDisp.slice(1);
 
                 let vData = "-";
                 if (vDataRaw) {
@@ -170,51 +204,83 @@
 
                 let lat = parseFloat(String(row[c.lat] || 0).replace(",", "."));
                 let lon = parseFloat(String(row[c.lon] || 0).replace(",", "."));
-
-                if (!lat || isNaN(lat) || lat === 0) {
-                    lat = res.lat + (Math.random() - 0.5) * 0.05;
-                    lon = res.lon + (Math.random() - 0.5) * 0.05;
+                if (!lat || isNaN(lat)) {
+                    lat = res.lat + (Math.random() - 0.5) * 0.04;
+                    lon = res.lon + (Math.random() - 0.5) * 0.04;
                 }
 
                 const getV = (idx) => (idx !== -1 && row[idx]) ? String(row[idx]).trim() : "-";
                 let vStato = getV(c.stato).toLowerCase();
                 let markerColor = "blue";
-                if (vStato.includes("liberato") || vStato.includes("recuperato da madre")) markerColor = "green";
+                if (vStato.includes("liberato") || vStato.includes("recuperato")) markerColor = "green";
                 else if (vStato.includes("morto")) markerColor = "red";
                 else if (vStato.includes("degenza")) markerColor = "yellow";
 
                 const customIcon = new L.Icon({
                     iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${markerColor}.png`,
                     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                    iconSize: [25, 41],
-                    iconAnchor: [12, 41],
-                    popupAnchor: [1, -34],
-                    shadowSize: [41, 41]
+                    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
                 });
 
                 const popup = `
-                    <div style="min-width:240px">
+                    <div style="min-width:210px">
                         <span class="specie-title">${vSpecie}</span>
-                        <div class="date-subtitle">Segnalazione del ${vData} ${vOra ? 'alle ore '+vOra : ''}</div>
+                        <div class="date-subtitle">Segnalazione del ${vData} ${vOra ? 'ore '+vOra : ''}</div>
                         <table class="popup-table">
                             <tr><td class="label">Località:</td><td class="valore">${vLocDisp}</td></tr>
                             <tr><td class="label">Comune:</td><td class="valore">${vComDisp}</td></tr>
-                            <tr><td class="label">Provincia:</td><td class="valore">${vProv}</td></tr>
+                            <tr><td class="label">Provincia:</td><td class="valore">${vProv} (${vReg})</td></tr>
                             <tr><td class="label">Stato:</td><td class="valore">${getV(c.stato)}</td></tr>
-                            <tr><td class="label">Condizioni:</td><td class="valore">${getV(c.note)}</td></tr>
                         </table>
                     </div>`;
 
                 const marker = L.marker([lat, lon], {icon: customIcon}).bindPopup(popup);
+                allMarkers.push({ marker, reg: vReg, prov: vProv, lat, lon });
                 markers.addLayer(marker);
-                bounds.push([lat, lon]);
-                count++;
             });
+
             map.addLayer(markers);
-            if (bounds.length > 0) map.fitBounds(bounds);
+            const initialBounds = allMarkers.map(m => [m.lat, m.lon]);
+            if (initialBounds.length > 0) map.fitBounds(initialBounds);
+
             document.getElementById('status').innerText = "✅ Sincronizzato";
-            document.getElementById('counter').innerText = "Totale: " + count;
-        } catch (e) { console.error(e); document.getElementById('status').innerText = "❌ Errore caricamento"; }
+            document.getElementById('counter').innerText = "Totale: " + allMarkers.length;
+
+            const regSelect = document.getElementById('filter-region');
+            const provSelect = document.getElementById('filter-prov');
+            const regioni = [...new Set(allMarkers.map(m => m.reg))].filter(r => r && r !== "-").sort();
+            regioni.forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r; opt.innerText = r;
+                regSelect.appendChild(opt);
+            });
+
+            function updateProvinces() {
+                const selReg = regSelect.value;
+                provSelect.innerHTML = '<option value="">Tutte le Province</option>';
+                const province = [...new Set(allMarkers.filter(m => !selReg || m.reg === selReg).map(m => m.prov))].filter(p => p && p !== "-").sort();
+                province.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p; opt.innerText = p;
+                    provSelect.appendChild(opt);
+                });
+            }
+
+            function applyFilters() {
+                const selReg = regSelect.value;
+                const selProv = provSelect.value;
+                markers.clearLayers();
+                const filtered = allMarkers.filter(m => (!selReg || m.reg === selReg) && (!selProv || m.prov === selProv));
+                filtered.forEach(m => markers.addLayer(m.marker));
+                document.getElementById('counter').innerText = "Filtrati: " + filtered.length + " / " + allMarkers.length;
+                if (filtered.length > 0) map.fitBounds(filtered.map(m => [m.lat, m.lon]), { padding: [20, 20] });
+            }
+
+            regSelect.onchange = () => { updateProvinces(); applyFilters(); };
+            provSelect.onchange = applyFilters;
+            document.getElementById('reset-filters').onclick = () => { regSelect.value = ""; updateProvinces(); applyFilters(); };
+            document.getElementById('filter-container').style.display = "block";
+        } catch (e) { console.error(e); document.getElementById('status').innerText = "❌ Errore"; }
     }
     init();
 </script>

@@ -1,7 +1,7 @@
 package com.example.batmaps
 
 object ComuniDatabase {
-    private val database = mapOf(
+    val database = mapOf(
         // Capoluoghi e Province (Sigle)
         "vicenza" to "VI", "padova" to "PD", "verona" to "VR", "venezia" to "VE", "treviso" to "TV",
         "belluno" to "BL", "rovigo" to "RO", "milano" to "MI", "roma" to "RM", "torino" to "TO",

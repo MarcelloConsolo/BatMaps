@@ -181,22 +181,24 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
             
             val dataFull = if (oRaw.isNotBlank() && oRaw != "-") "Segnalazione del $dRaw alle ore $oRaw" else "Segnalazione del $dRaw"
             
-            val localita = formatter.formatCellValue(row.getCell(colMap["loc"] ?: -1)).ifBlank { "-" }
+            val localita = formatter.formatCellValue(row.getCell(colMap["loc"] ?: -1)).trim()
             val comuneRaw = formatter.formatCellValue(row.getCell(colMap["comune"] ?: -1)).trim()
-            var provincia = formatter.formatCellValue(row.getCell(colMap["prov"] ?: -1)).trim()
+            val provinciaRaw = formatter.formatCellValue(row.getCell(colMap["prov"] ?: -1)).trim()
 
-            val rigaTesto = (0 until row.lastCellNum).joinToString(" ") { formatter.formatCellValue(row.getCell(it)).lowercase() }
+            // Logica di priorità RIGOROSA: Provincia -> Comune -> Località
             val provSigla = when {
-                rigaInteraContains(rigaTesto, "padova", "san martino di lupari") -> "PD"
-                rigaInteraContains(rigaTesto, "venezia", "mestre", "eraclea") -> "VE"
-                rigaTesto.contains("verona") -> "VR"
-                rigaInteraContains(rigaTesto, "treviso", "cappella maggiore") -> "TV"
-                rigaInteraContains(rigaTesto, "vicenza", "bassano", "asiago", "castelgomberto", "san vito", "arcugnano", "marano vicentino", "breganze", "costabissara", "carrè", "santorso", "sossano") -> "VI"
-                rigaTesto.contains("modena") -> "MO"
-                rigaTesto.contains("bergamo") -> "BG"
-                rigaTesto.contains("ragusa") -> "RG"
-                rigaTesto.contains("milano") -> "MI"
-                else -> if (provincia.length == 2) provincia.uppercase() else ComuniDatabase.cercaProvincia(comuneRaw, localita)
+                // 1. Provincia esplicita (2 lettere)
+                provinciaRaw.length == 2 -> provinciaRaw.uppercase()
+                
+                // 2. Comune (match nel database)
+                comuneRaw.isNotBlank() && ComuniDatabase.database.containsKey(comuneRaw.lowercase()) -> 
+                    ComuniDatabase.database[comuneRaw.lowercase()]!!
+                
+                // 3. Località (ricerca nel database comuni)
+                localita.isNotBlank() -> ComuniDatabase.cercaProvincia("", localita)
+                
+                // Fallback
+                else -> ComuniDatabase.cercaProvincia(comuneRaw, "")
             }
 
             var lat = getCellDouble(row, colMap["lat"] ?: -1)

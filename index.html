@@ -12,32 +12,32 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
     <style>
-        body { margin: 0; padding: 0; font-family: sans-serif; background: #f4f7f6; }
-        #map { height: 100vh; width: 100%; }
+        body { margin:0; padding:0; font-family:sans-serif; background:#f4f7f6; }
+        #map { height:100vh; width:100%; }
         #overlay {
-            position: fixed; top: 15px; right: 15px;
-            background: white; padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            z-index: 1000;
-            border-left: 5px solid #2980b9;
-            width: 230px;
+            position:fixed; top:15px; right:15px;
+            background:white; padding:15px;
+            border-radius:10px;
+            box-shadow:0 4px 15px rgba(0,0,0,0.2);
+            z-index:1000;
+            border-left:5px solid #2980b9;
+            width:230px;
         }
-        .popup-table { font-size: 13px; border-collapse: collapse; width: 100%; margin-top: 5px; }
-        .popup-table td { padding: 5px 0; border-bottom: 1px solid #eee; vertical-align: top; }
-        .label { font-weight: bold; color: #7f8c8d; width: 90px; }
-        .valore { color: #2c3e50; font-weight: 500; }
-        .specie-title { color: #2980b9; font-size: 1.2em; font-weight: bold; display: block; }
-        .date-subtitle { font-size: 0.85em; color: #95a5a6; font-style: italic; margin-bottom: 8px; }
+        .popup-table { font-size:13px; border-collapse:collapse; width:100%; margin-top:5px; }
+        .popup-table td { padding:5px 0; border-bottom:1px solid #eee; vertical-align:top; }
+        .label { font-weight:bold; color:#7f8c8d; width:90px; }
+        .valore { color:#2c3e50; font-weight:500; }
+        .specie-title { color:#2980b9; font-size:1.2em; font-weight:bold; display:block; }
+        .date-subtitle { font-size:0.85em; color:#95a5a6; font-style:italic; margin-bottom:8px; }
     </style>
 </head>
 
 <body>
 
 <div id="overlay">
-    <b style="font-size:1.2em; color:#2c3e50;">BatMaps 2025</b><br>
+    <b style="font-size:1.2em;color:#2c3e50;">BatMaps 2025</b><br>
     <div id="status" style="color:#7f8c8d;font-size:0.9em;margin:5px 0;">Sincronizzazione Excel...</div>
-    <div id="counter" style="font-size:1.2em;font-weight:bold;color:#27ae60;margin-bottom:10px;"></div>
+    <div id="counter" style="font-size:1.2em;font-weight:bold;color:#27ae60;"></div>
 </div>
 
 <div id="map"></div>
@@ -47,21 +47,33 @@ const map = L.map('map').setView([45.4, 11.8], 8);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
+/* =========================
+   NORMALIZZAZIONE FORTE
+   (FIX BASSANO + simili)
+========================= */
+const normalizeKey = (str) =>
+    String(str || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
 function formatTime(val) {
     if (!val || val === "-") return "";
     let s = String(val).trim();
     let num = parseFloat(s.replace(",", "."));
 
     if (!isNaN(num) && num > 0 && num < 1) {
-        let totalSeconds = Math.round(num * 24 * 3600);
-        let h = Math.floor(totalSeconds / 3600);
-        let m = Math.floor((totalSeconds % 3600) / 60);
-        return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+        let sec = Math.round(num * 24 * 3600);
+        let h = Math.floor(sec / 3600);
+        let m = Math.floor((sec % 3600) / 60);
+        return (h<10?"0":"")+h+":"+(m<10?"0":"")+m;
     }
 
     if (s.includes(":")) {
-        let parts = s.split(":");
-        return parts[0].padStart(2,'0') + ":" + parts[1].padStart(2,'0');
+        let p = s.split(":");
+        return p[0].padStart(2,'0') + ":" + p[1].padStart(2,'0');
     }
 
     return s;
@@ -149,21 +161,25 @@ async function init() {
             let lat = parseFloat(String(row[c.lat]||"").replace(",","."));
             let lon = parseFloat(String(row[c.lon]||"").replace(",","."));
 
+            /* =========================
+               FIX BASSANO + COMUNI
+            ========================= */
             if (isNaN(lat) || isNaN(lon)) {
-                const key = vComRaw.toLowerCase().trim();
-                if (dbComuni[key]) {
-                    lat = dbComuni[key].lat;
-                    lon = dbComuni[key].lon;
+                const key = normalizeKey(vComRaw);
+                const match = dbComuni[key];
+
+                if (match) {
+                    lat = match.lat;
+                    lon = match.lon;
                 } else {
-                    return; // nessun marker se non localizzabile
+                    return; // non inventare coordinate
                 }
             }
 
-            // ✔ FIX LOCALITÀ (qui la correzione richiesta)
             const safeLoc =
                 (vLocRaw && vLocRaw.trim() !== "")
                     ? vLocRaw
-                    : (vComRaw || "");
+                    : vComRaw;
 
             const marker = L.marker([lat, lon]).bindPopup(`
                 <div style="min-width:210px">

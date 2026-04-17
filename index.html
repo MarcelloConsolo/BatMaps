@@ -132,25 +132,39 @@
                 let vProvOrig = String(row[c.prov] || "").trim();
                 let vOra = formatTime(row[c.ora]);
 
-                // Logica di priorità: Località -> Comune -> Provincia
-                function determinaProvincia(loc, com, prov, riga) {
-                    let r = riga.toLowerCase();
-                    // 1. & 2. Località e Comune (Total Scan della riga per match sicuri)
-                    if (r.includes("padova") || r.includes("san martino di lupari")) return "PD";
-                    if (r.includes("venezia") || r.includes("eraclea") || r.includes("mestre")) return "VE";
-                    if (r.includes("verona")) return "VR";
-                    if (r.includes("treviso") || r.includes("cappella maggiore")) return "TV";
-                    if (r.includes("vicenza") || r.includes("bassano") || r.includes("asiago") || r.includes("castelgomberto") || r.includes("san vito") || r.includes("arcugnano") || r.includes("marano vicentino") || r.includes("breganze") || r.includes("costabissara") || r.includes("carrè") || r.includes("santorso") || r.includes("sossano")) return "VI";
-                    if (r.includes("modena")) return "MO";
-                    if (r.includes("bergamo")) return "BG";
+                // Database potenziato per il Sito
+                const dbPunti = {
+                    "vicenza": [45.5479, 11.5446, "VI"], "padova": [45.4064, 11.8768, "PD"],
+                    "verona": [45.4384, 10.9916, "VR"], "venezia": [45.4408, 12.3155, "VE"],
+                    "treviso": [45.6669, 12.2431, "TV"], "belluno": [46.1425, 12.2167, "BL"],
+                    "rovigo": [45.0711, 11.7907, "RO"], "modena": [44.6471, 10.9252, "MO"],
+                    "arzignano": [45.5210, 11.3323, "VI"], "bassano del grappa": [45.7665, 11.7342, "VI"],
+                    "schio": [45.7124, 11.3541, "VI"], "thiene": [45.7073, 11.4776, "VI"],
+                    "san martino di lupari": [45.6558, 11.8601, "PD"], "carrè": [45.7485, 11.4589, "VI"],
+                    "santorso": [45.7347, 11.3908, "VI"], "sossano": [45.3582, 11.5113, "VI"]
+                };
 
-                    // 3. Provincia esplicita (se sigla di 2 lettere)
-                    if (prov.length === 2) return prov.toUpperCase();
+                function determinaDati(loc, com, prov) {
+                    let p = prov.toUpperCase().trim();
+                    let c = com.toLowerCase().trim();
+                    let l = loc.toLowerCase().trim();
 
-                    return "VI"; // Default
+                    // 1. Provincia
+                    if (p.length === 2) {
+                        if (dbPunti[c]) return { prov: p, lat: dbPunti[c][0], lon: dbPunti[c][1] };
+                        const cap = Object.values(dbPunti).find(v => v[2] === p);
+                        if (cap) return { prov: p, lat: cap[0], lon: cap[1] };
+                    }
+                    // 2. Comune
+                    if (dbPunti[c]) return { prov: dbPunti[c][2], lat: dbPunti[c][0], lon: dbPunti[c][1] };
+                    // 3. Località
+                    for (let k in dbPunti) { if (l.includes(k)) return { prov: dbPunti[k][2], lat: dbPunti[k][0], lon: dbPunti[k][1] }; }
+
+                    return { prov: "VI", lat: 45.5479, lon: 11.5446 };
                 }
 
-                let vProv = determinaProvincia(vLoc, vCom, vProvOrig, row.join(" "));
+                const res = determinaDati(vLoc, vCom, vProvOrig);
+                let vProv = res.prov;
 
                 let vData = "-";
                 if (vDataRaw) {
@@ -162,9 +176,8 @@
                 let lon = parseFloat(String(row[c.lon] || 0).replace(",", "."));
 
                 if (!lat || isNaN(lat) || lat === 0) {
-                    const base = coordsDB[vProv] || coordsDB["VI"];
-                    lat = base[0] + (Math.random()-0.5)*0.2;
-                    lon = base[1] + (Math.random()-0.5)*0.2;
+                    lat = res.lat + (Math.random() - 0.5) * 0.05;
+                    lon = res.lon + (Math.random() - 0.5) * 0.05;
                 }
 
                 const getV = (idx) => (idx !== -1 && row[idx]) ? String(row[idx]).trim() : "-";

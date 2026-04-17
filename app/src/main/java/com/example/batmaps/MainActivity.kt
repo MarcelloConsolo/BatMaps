@@ -185,37 +185,17 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
             val comuneRaw = formatter.formatCellValue(row.getCell(colMap["comune"] ?: -1)).trim()
             val provinciaRaw = formatter.formatCellValue(row.getCell(colMap["prov"] ?: -1)).trim()
 
-            // Logica di priorità RIGOROSA: Provincia -> Comune -> Località
-            val provSigla = when {
-                // 1. Provincia esplicita (2 lettere)
-                provinciaRaw.length == 2 -> provinciaRaw.uppercase()
-                
-                // 2. Comune (match nel database)
-                comuneRaw.isNotBlank() && ComuniDatabase.database.containsKey(comuneRaw.lowercase()) -> 
-                    ComuniDatabase.database[comuneRaw.lowercase()]!!
-                
-                // 3. Località (ricerca nel database comuni)
-                localita.isNotBlank() -> ComuniDatabase.cercaProvincia("", localita)
-                
-                // Fallback
-                else -> ComuniDatabase.cercaProvincia(comuneRaw, "")
-            }
+            // Ottieni dati dal database basato sulla priorità: Provincia -> Comune -> Località
+            val datiBase = ComuniDatabase.cercaDati(comuneRaw, localita, provinciaRaw)
+            val provSigla = datiBase.first
 
             var lat = getCellDouble(row, colMap["lat"] ?: -1)
             var lon = getCellDouble(row, colMap["lon"] ?: -1)
 
             if (lat == 0.0) {
-                val coords = mapOf(
-                    "PD" to Pair(45.4064, 11.8768), "VE" to Pair(45.4408, 12.3155),
-                    "VR" to Pair(45.4384, 10.9916), "TV" to Pair(45.6669, 12.2431),
-                    "RO" to Pair(45.0711, 11.7907), "BL" to Pair(46.1425, 12.2167),
-                    "VI" to Pair(45.5479, 11.5446), "BG" to Pair(45.6983, 9.6773),
-                    "RG" to Pair(36.9265, 14.7302), "MI" to Pair(45.4642, 9.1900),
-                    "MO" to Pair(44.6471, 10.9252)
-                )
-                val puntoBase = coords[provSigla] ?: coords["VI"]!!
-                lat = puntoBase.first + (Math.random() - 0.5) * 0.2
-                lon = puntoBase.second + (Math.random() - 0.5) * 0.2
+                // Se mancano i GPS, usa i dati precisi dal database con un offset piccolissimo per non sovrapporre
+                lat = datiBase.second + (Math.random() - 0.5) * 0.05
+                lon = datiBase.third + (Math.random() - 0.5) * 0.05
             }
             
             val stato = formatter.formatCellValue(row.getCell(colMap["stato"] ?: -1)).ifBlank { "-" }

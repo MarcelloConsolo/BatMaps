@@ -51,22 +51,22 @@ object ComuniDatabase {
         }
     }
 
-    fun cercaDati(comune: String, localita: String, provincia: String): Triple<String, Double, Double> {
+    data class Result(val nome: String, val prov: String, val lat: Double, val lon: Double)
+
+    fun cercaDati(comune: String, localita: String, provincia: String): Result {
         val p = provincia.uppercase().trim()
         val c = comune.lowercase().trim()
         val l = localita.lowercase().trim()
 
         // 1. Priorità: Comune esatto nel DB
         databaseCompleto[c]?.let { 
-            return Triple(it.prov, it.lat, it.lon)
+            return Result(c, it.prov, it.lat, it.lon)
         }
 
         // 2. Priorità: Località (cerca se il testo della località contiene un nome di comune)
-        // Nota: per performance su 8000 comuni, limitiamo la ricerca o usiamo filtri se necessario
-        // Ma per volumi ridotti di segnalazioni, un ciclo va bene
         for ((nome, info) in databaseCompleto) {
             if (nome.length > 3 && l.contains(nome)) {
-                return Triple(info.prov, info.lat, info.lon)
+                return Result(nome, info.prov, info.lat, info.lon)
             }
         }
 
@@ -74,19 +74,37 @@ object ComuniDatabase {
         if (p.length == 2) {
             val capoluogo = getCapoluogo(p)
             databaseCompleto[capoluogo]?.let {
-                return Triple(p, it.lat, it.lon)
+                return Result(capoluogo, p, it.lat, it.lon)
             }
         }
 
-        // Default: Vicenza
-        return Triple("VI", 45.5479, 11.5446)
+        return Result("vicenza", "VI", 45.5479, 11.5446)
     }
 
     private fun getCapoluogo(prov: String): String {
         return when(prov) {
-            "PD" -> "padova"; "VI" -> "vicenza"; "VE" -> "venezia"; "VR" -> "verona"; "TV" -> "treviso"
-            "BL" -> "belluno"; "RO" -> "rovigo"; "MO" -> "modena"; "MI" -> "milano"; "RM" -> "roma"
-            "TO" -> "torino"; "BS" -> "brescia"; "BO" -> "bologna"; "TN" -> "trento"
+            "AG" -> "agrigento"; "AL" -> "alessandria"; "AN" -> "ancona"; "AO" -> "aosta"; "AQ" -> "l'aquila"
+            "AR" -> "arezzo"; "AP" -> "ascoli piceno"; "AT" -> "asti"; "AV" -> "avellino"; "BA" -> "bari"
+            "BT" -> "barletta"; "BL" -> "belluno"; "BN" -> "benevento"; "BG" -> "bergamo"; "BI" -> "biella"
+            "BO" -> "bologna"; "BZ" -> "bolzano"; "BS" -> "brescia"; "BR" -> "brindisi"; "CA" -> "cagliari"
+            "CL" -> "caltanissetta"; "CB" -> "campobasso"; "CE" -> "caserta"; "CT" -> "catania"; "CZ" -> "catanzaro"
+            "CH" -> "chieti"; "CO" -> "como"; "CS" -> "cosenza"; "CR" -> "cremona"; "KR" -> "crotone"
+            "CN" -> "cuneo"; "EN" -> "enna"; "FM" -> "fermo"; "FE" -> "ferrara"; "FI" -> "firenze"
+            "FG" -> "foggia"; "FC" -> "forli'"; "FR" -> "frosinone"; "GE" -> "genova"; "GO" -> "gorizia"
+            "GR" -> "grosseto"; "IM" -> "imperia"; "IS" -> "isernia"; "SP" -> "la spezia"; "LT" -> "latina"
+            "LE" -> "lecce"; "LC" -> "lecco"; "LI" -> "livorno"; "LO" -> "lodi"; "LU" -> "lucca"
+            "MC" -> "macerata"; "MN" -> "mantova"; "MS" -> "massa"; "MT" -> "matera"; "ME" -> "messina"
+            "MI" -> "milano"; "MO" -> "modena"; "MB" -> "monza"; "NA" -> "napoli"; "NO" -> "novara"
+            "NU" -> "nuoro"; "OR" -> "oristano"; "PD" -> "padova"; "PA" -> "palermo"; "PR" -> "parma"
+            "PV" -> "pavia"; "PG" -> "perugia"; "PU" -> "pesaro"; "PE" -> "pescara"; "PC" -> "piacenza"
+            "PI" -> "pisa"; "PT" -> "pistoia"; "PN" -> "pordenone"; "PZ" -> "potenza"; "PO" -> "prato"
+            "RG" -> "ragusa"; "RA" -> "ravenna"; "RC" -> "reggio calabria"; "RE" -> "reggio emilia"; "RI" -> "rieti"
+            "RN" -> "rimini"; "RM" -> "roma"; "RO" -> "rovigo"; "SA" -> "salerno"; "SS" -> "sassari"
+            "SV" -> "savona"; "SI" -> "siena"; "SR" -> "siracusa"; "SO" -> "sondrio"; "TA" -> "taranto"
+            "TE" -> "teramo"; "TR" -> "terni"; "TO" -> "torino"; "TP" -> "trapani"; "TN" -> "trento"
+            "TV" -> "treviso"; "TS" -> "trieste"; "UD" -> "udine"; "VA" -> "varese"; "VE" -> "venezia"
+            "VB" -> "verbania"; "VC" -> "vercelli"; "VR" -> "verona"; "VV" -> "vibo valentia"; "VI" -> "vicenza"
+            "VT" -> "viterbo"
             else -> "vicenza"
         }
     }

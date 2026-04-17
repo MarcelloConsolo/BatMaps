@@ -210,23 +210,29 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
                 .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
             val provinciaRaw = formatter.formatCellValue(row.getCell(colMap["prov"] ?: -1)).trim()
 
-            // Ottieni dati dal database basato sulla priorità: Provincia -> Comune -> Località
-            val datiBase = ComuniDatabase.cercaDati(comuneRaw, localita, provinciaRaw)
-            val provSigla = datiBase.first
+            // Ottieni dati dal database basato sulla priorità: Comune -> Località -> Provincia
+            val res = ComuniDatabase.cercaDati(comuneRaw, localita, provinciaRaw)
+            
+            // Se il comune nell'Excel è vuoto o "-", ma abbiamo trovato un comune nel testo della località, usiamolo!
+            val comuneDisplay = if (comuneRaw.isBlank() || comuneRaw == "-") {
+                res.nome.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+            } else {
+                comuneRaw
+            }
 
             var lat = getCellDouble(row, colMap["lat"] ?: -1)
             var lon = getCellDouble(row, colMap["lon"] ?: -1)
 
             if (lat == 0.0) {
                 // Se mancano i GPS, usa i dati precisi dal database con un offset piccolissimo per non sovrapporre
-                lat = datiBase.second + (Math.random() - 0.5) * 0.05
-                lon = datiBase.third + (Math.random() - 0.5) * 0.05
+                lat = res.lat + (Math.random() - 0.5) * 0.05
+                lon = res.lon + (Math.random() - 0.5) * 0.05
             }
             
             val stato = formatter.formatCellValue(row.getCell(colMap["stato"] ?: -1)).ifBlank { "-" }
             val note = formatter.formatCellValue(row.getCell(colMap["note"] ?: -1)).ifBlank { "-" }
 
-            lista.add(Segnalazione(dataFull, specie.ifBlank { "Pipistrello" }, localita, comuneRaw.ifBlank { "-" }, provSigla, stato, note, lat, lon) to GeoPoint(lat, lon))
+            lista.add(Segnalazione(dataFull, specie.ifBlank { "Pipistrello" }, localita, comuneDisplay, res.prov, stato, note, lat, lon) to GeoPoint(lat, lon))
         }
         workbook.close()
     } catch (e: Exception) { Log.e("BatMaps", "Errore: ${e.message}") }

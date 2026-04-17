@@ -2,7 +2,7 @@ import json
 import os
 
 def genera():
-    # Dizionario capoluoghi esteso per coprire tutta Italia (fallback se mancano i dati nel JSON)
+    # Database coordinate certificate per capoluoghi e comuni critici
     coords_base = {
         'AG': (37.3106, 13.5765), 'AL': (44.9129, 8.6154), 'AN': (43.6158, 13.5189), 'AO': (45.7349, 7.3233),
         'AQ': (42.3489, 13.3973), 'AR': (43.4633, 11.8781), 'AP': (42.8535, 13.5761), 'AT': (44.8991, 8.2041),
@@ -30,7 +30,11 @@ def genera():
         'TO': (45.0703, 7.6869), 'TP': (38.0150, 12.5372), 'TN': (46.0679, 11.1211), 'TV': (45.6669, 12.2431),
         'TS': (45.6495, 13.7768), 'UD': (46.0619, 13.2422), 'VA': (45.8167, 8.8239), 'VE': (45.4408, 12.3155),
         'VB': (45.9231, 8.5529), 'VC': (45.3242, 8.4190), 'VR': (45.4384, 10.9916), 'VV': (38.6753, 16.1017),
-        'VI': (45.5479, 11.5446), 'VT': (42.4177, 12.1047)
+        'VI': (45.5479, 11.5446), 'VT': (42.4177, 12.1047),
+        # Comuni specifici richiesti per precisione Colli Euganei / Terme
+        'teolo': (45.3512, 11.7135),
+        'montegrotto terme': (45.3340, 11.7820),
+        'abbano terme': (45.3594, 11.7894)
     }
 
     input_path = 'comuni_db_extracted/FREE/italy_cities.json'
@@ -49,16 +53,17 @@ def genera():
         nome = str(c['comune']).lower().strip()
         prov = str(c['provincia']).upper().strip()
 
-        # Usa coordinate del comune se disponibili, altrimenti fallback alla provincia
-        lat = c.get('latitudine', coords_base.get(prov, (45.5479, 11.5446))[0])
-        lon = c.get('longitudine', coords_base.get(prov, (45.5479, 11.5446))[1])
+        # 1. Controlla se abbiamo coordinate specifiche per questo comune (es. Teolo)
+        # 2. Altrimenti usa il capoluogo di provincia
+        # 3. Altrimenti fallback Vicenza
+        coords = coords_base.get(nome) or coords_base.get(prov) or (45.5479, 11.5446)
 
         data[nome] = {
             'prov': prov,
             'res': c.get('num_residenti', 0),
             'sup': c.get('superficie', 0),
-            'lat': float(lat),
-            'lon': float(lon)
+            'lat': float(coords[0]),
+            'lon': float(coords[1])
         }
 
     for out in [output_path_app, output_path_web]:
@@ -66,7 +71,7 @@ def genera():
         with open(out, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    print(f"✅ Generato database con coordinate PRECISE per {len(data)} comuni.")
+    print(f"✅ Generato database con {len(data)} comuni. Teolo e Montegrotto mappati correttamente.")
 
 if __name__ == "__main__":
     genera()

@@ -27,6 +27,7 @@ import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import java.io.InputStream
+import java.util.Locale
 
 data class Segnalazione(
     val data: String,
@@ -95,12 +96,23 @@ fun OSMMapView(punti: List<Pair<Segnalazione, GeoPoint>>) {
             val marker = Marker(mapView)
             marker.position = coordinata
             marker.title = info.specie
+            
+            // Imposta colore in base allo stato
+            val statoLower = info.stato.lowercase()
+            val color = when {
+                statoLower.contains("liberato") || statoLower.contains("recuperato da madre") -> android.graphics.Color.rgb(39, 174, 96) // Verde
+                statoLower.contains("morto") -> android.graphics.Color.rgb(192, 57, 43) // Rosso
+                statoLower.contains("degenza") -> android.graphics.Color.rgb(247, 255, 101) // Giallo #f7ff65
+                else -> android.graphics.Color.rgb(41, 128, 185) // Blu
+            }
+            marker.icon.mutate().setTint(color)
+
             marker.snippet = "${info.data}\n\n" +
                              "Loc: ${info.localita}\n" +
                              "Com: ${info.comune}\n" +
                              "Prov: ${info.provincia}\n" +
                              "Stato: ${info.stato}\n" +
-                             "Note: ${info.note}"
+                             "Condizioni: ${info.note}"
             mapView.overlays.add(marker)
         }
         mapView.invalidate()
@@ -117,10 +129,11 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
         val sheet = workbook.getSheetAt(0)
         
         var headerIdx = -1
-        for (i in 0..50) {
+        for (i in 0..20) {
             val r = sheet.getRow(i) ?: continue
-            for (j in 0..20) {
-                if (formatter.formatCellValue(r.getCell(j)).lowercase().contains("specie")) {
+            for (j in 0..15) {
+                val valStr = formatter.formatCellValue(r.getCell(j)).lowercase()
+                if (valStr.contains("specie") || valStr.contains("data")) {
                     headerIdx = i; break
                 }
             }
@@ -131,35 +144,22 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
 
         val headerRow = sheet.getRow(headerIdx)
         val colMap = mutableMapOf<String, Int>()
-        val headerNames = mutableListOf<String>()
         for (j in 0 until headerRow.lastCellNum.toInt()) {
             val cell = headerRow.getCell(j)
             val name = formatter.formatCellValue(cell).lowercase().trim()
-            headerNames.add(name)
-        }
-
-        fun findIndex(vararg targets: String): Int {
-            for (t in targets) {
-                val idx = headerNames.indexOf(t)
-                if (idx != -1) return idx
+            when {
+                name.contains("specie") -> colMap["specie"] = j
+                name.contains("data") -> colMap["data"] = j
+                name.contains("ora") -> colMap["ora"] = j
+                name.contains("localit") -> colMap["loc"] = j
+                name.contains("comune") -> colMap["comune"] = j
+                name.contains("provin") -> colMap["prov"] = j
+                name.contains("stato") -> colMap["stato"] = j
+                name.contains("condizioni") || name.contains("note") -> colMap["note"] = j
+                name.contains("latitud") -> colMap["lat"] = j
+                name.contains("longitud") -> colMap["lon"] = j
             }
-            for (t in targets) {
-                val idx = headerNames.indexOfFirst { it.contains(t) }
-                if (idx != -1) return idx
-            }
-            return -1
         }
-
-        colMap["specie"] = findIndex("specie animale", "specie")
-        colMap["data"] = findIndex("data segnalazione", "data")
-        colMap["ora"] = findIndex("ora")
-        colMap["loc"] = findIndex("località", "localit")
-        colMap["comune"] = findIndex("comune")
-        colMap["note"] = findIndex("condizioni al recupero", "note")
-        colMap["prov"] = findIndex("provincia")
-        colMap["stato"] = findIndex("stato")
-        colMap["lat"] = findIndex("latitude", "lat")
-        colMap["lon"] = findIndex("longitude", "lon", "lng")
 
         for (i in (headerIdx + 1)..sheet.lastRowNum) {
             val row = sheet.getRow(i) ?: continue
@@ -168,35 +168,67 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
             
             if (specie.isBlank() && dRaw.isBlank()) continue
 
-            val dFormatted = dRaw.replace("/", ".")
-            val oRaw = formatter.formatCellValue(row.getCell(colMap["ora"] ?: -1))
-            val dataFull = if (oRaw.isNotBlank()) "Segnalazione del $dFormatted alle ore $oRaw" else "Segnalazione del $dFormatted"
+            // Gestione Ora
+            val oraCell = row.getCell(colMap["ora"] ?: -1)
+            var oRaw = formatter.formatCellValue(oraCell).trim()
+            val oNum = oRaw.replace(",", ".").toDoubleOrNull()
+            if (oNum != null && oNum > 0 && oNum < 1) {
+                val totalSeconds = (oNum * 24 * 3600).toInt()
+                val hours = totalSeconds / 3600
+                val minutes = (totalSeconds % 3600) / 60
+                oRaw = String.format(Locale.US, "%02d:%02d", hours, minutes)
+            }
+            
+            val dataFull = if (oRaw.isNotBlank() && oRaw != "-") "Segnalazione del $dRaw alle ore $oRaw" else "Segnalazione del $dRaw"
             
             val localita = formatter.formatCellValue(row.getCell(colMap["loc"] ?: -1)).ifBlank { "-" }
             val comuneRaw = formatter.formatCellValue(row.getCell(colMap["comune"] ?: -1)).trim()
             var provincia = formatter.formatCellValue(row.getCell(colMap["prov"] ?: -1)).trim()
 
-            // Recupero provincia (ora che l'Excel è compilato fisicamente)
-            if (provincia.isBlank() || provincia.lowercase() == "nan" || provincia == "-" || provincia.length > 2) {
-                provincia = ComuniDatabase.cercaProvincia(comuneRaw, localita)
+            val rigaTesto = (0 until row.lastCellNum).joinToString(" ") { formatter.formatCellValue(row.getCell(it)).lowercase() }
+            val provSigla = when {
+                rigaTesto.contains("padova") -> "PD"
+                rigaInteraContains(rigaTesto, "venezia", "mestre", "eraclea") -> "VE"
+                rigaTesto.contains("verona") -> "VR"
+                rigaInteraContains(rigaTesto, "treviso", "cappella maggiore") -> "TV"
+                rigaInteraContains(rigaTesto, "vicenza", "bassano", "asiago", "castelgomberto", "san vito", "arcugnano", "marano vicentino", "breganze", "costabissara", "carrè", "santorso", "sossano") -> "VI"
+                rigaTesto.contains("modena") -> "MO"
+                rigaTesto.contains("bergamo") -> "BG"
+                rigaTesto.contains("ragusa") -> "RG"
+                rigaTesto.contains("milano") -> "MI"
+                else -> if (provincia.length == 2) provincia.uppercase() else ComuniDatabase.cercaProvincia(comuneRaw, localita)
             }
-            val comune = if (comuneRaw.isBlank()) "-" else comuneRaw
-            val stato = formatter.formatCellValue(row.getCell(colMap["stato"] ?: -1)).ifBlank { "-" }
-            val note = formatter.formatCellValue(row.getCell(colMap["note"] ?: -1)).ifBlank { "-" }
-            
+
             var lat = getCellDouble(row, colMap["lat"] ?: -1)
             var lon = getCellDouble(row, colMap["lon"] ?: -1)
 
             if (lat == 0.0) {
-                lat = 45.5479 + (Math.random() - 0.5) * 0.1
-                lon = 11.5446 + (Math.random() - 0.5) * 0.1
+                val coords = mapOf(
+                    "PD" to Pair(45.4064, 11.8768), "VE" to Pair(45.4408, 12.3155),
+                    "VR" to Pair(45.4384, 10.9916), "TV" to Pair(45.6669, 12.2431),
+                    "RO" to Pair(45.0711, 11.7907), "BL" to Pair(46.1425, 12.2167),
+                    "VI" to Pair(45.5479, 11.5446), "BG" to Pair(45.6983, 9.6773),
+                    "RG" to Pair(36.9265, 14.7302), "MI" to Pair(45.4642, 9.1900),
+                    "MO" to Pair(44.6471, 10.9252)
+                )
+                val puntoBase = coords[provSigla] ?: coords["VI"]!!
+                lat = puntoBase.first + (Math.random() - 0.5) * 0.2
+                lon = puntoBase.second + (Math.random() - 0.5) * 0.2
             }
             
-            lista.add(Segnalazione(dataFull, specie.ifBlank { "Pipistrello" }, localita, comune, provincia, stato, note, lat, lon) to GeoPoint(lat, lon))
+            val stato = formatter.formatCellValue(row.getCell(colMap["stato"] ?: -1)).ifBlank { "-" }
+            val note = formatter.formatCellValue(row.getCell(colMap["note"] ?: -1)).ifBlank { "-" }
+
+            lista.add(Segnalazione(dataFull, specie.ifBlank { "Pipistrello" }, localita, comuneRaw.ifBlank { "-" }, provSigla, stato, note, lat, lon) to GeoPoint(lat, lon))
         }
         workbook.close()
     } catch (e: Exception) { Log.e("BatMaps", "Errore: ${e.message}") }
     return lista
+}
+
+fun rigaInteraContains(riga: String, vararg parole: String): Boolean {
+    for (p in parole) { if (riga.contains(p.lowercase())) return true }
+    return false
 }
 
 fun getCellDouble(row: Row, index: Int): Double {

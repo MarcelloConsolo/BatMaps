@@ -20,7 +20,12 @@ object ComuniDatabase {
         
         // Comuni del Veronese
         "villafranca di verona" to "VR", "san giovanni lupatoto" to "VR", "san bonifacio" to "VR",
-        "bussolengo" to "VR", "legnago" to "VR", "pescantina" to "VR"
+        "bussolengo" to "VR", "legnago" to "VR", "pescantina" to "VR",
+
+        // Comuni aggiunti su segnalazione
+        "castelgomberto" to "VI", "valle di castelgomberto" to "VI", "san vito di leguzzano" to "VI",
+        "arcugnano" to "VI", "marano vicentino" to "VI", "breganze" to "VI", "costabissara" to "VI",
+        "cappella maggiore" to "TV", "modena" to "MO"
         
         // Puoi aggiungere qui tutti i comuni che desideri seguendo lo schema "comune" to "PROV"
     )

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-    <title>BatMaps 2025 - Versione 17.8</title>
+    <title>BatMaps 2025 - Versione 17.9</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -35,14 +35,15 @@
 </div>
 <div id="map"></div>
 <script>
-    const map = L.map('map').setView([42.0, 12.5], 6); // Vista più ampia sull'Italia
+    const map = L.map('map').setView([42.0, 12.5], 6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
     const coordsDB = {
         "PD": [45.4064, 11.8768], "VE": [45.4408, 12.3155], "VR": [45.4384, 10.9916], "TV": [45.6669, 12.2431],
         "RO": [45.0711, 11.7907], "BL": [46.1425, 12.2167], "VI": [45.5479, 11.5446], "BG": [45.6983, 9.6773],
         "RG": [36.9265, 14.7302], "MI": [45.4642, 9.1900], "RM": [41.9028, 12.4964], "NA": [40.8518, 14.2681],
-        "TO": [45.0703, 7.6869], "BO": [44.4949, 11.3426], "BS": [45.5416, 10.2118], "TN": [46.0679, 11.1211]
+        "TO": [45.0703, 7.6869], "BO": [44.4949, 11.3426], "BS": [45.5416, 10.2118], "TN": [46.0679, 11.1211],
+        "MO": [44.6471, 10.9252]
     };
 
     function getProvSigla(riga) {
@@ -50,8 +51,9 @@
         if (t.includes("padova")) return "PD";
         if (t.includes("venezia") || t.includes("eraclea") || t.includes("mestre")) return "VE";
         if (t.includes("verona")) return "VR";
-        if (t.includes("treviso")) return "TV";
-        if (t.includes("vicenza") || t.includes("bassano") || t.includes("asiago")) return "VI";
+        if (t.includes("treviso") || t.includes("cappella maggiore")) return "TV";
+        if (t.includes("vicenza") || t.includes("bassano") || t.includes("asiago") || t.includes("castelgomberto") || t.includes("san vito di leguzzano") || t.includes("arcugnano") || t.includes("marano vicentino") || t.includes("breganze") || t.includes("costabissara")) return "VI";
+        if (t.includes("modena")) return "MO";
         if (t.includes("bergamo")) return "BG";
         if (t.includes("ragusa")) return "RG";
         if (t.includes("milano")) return "MI";

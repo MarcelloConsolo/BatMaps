@@ -13,10 +13,10 @@ object ComuniDatabase {
         "thiene" to "VI", "montecchio maggiore" to "VI", "lonigo" to "VI", "malo" to "VI",
         "cassola" to "VI", "rosà" to "VI", "marostica" to "VI", "chiampo" to "VI",
         "torrebelvicino" to "VI", "sandrigo" to "VI", "isola vicentina" to "VI",
-        
-        // Comuni del Padovano
-        "albignasego" to "PD", "vigonza" to "PD", "selvazzano dentro" to "PD", "este" to "PD",
-        "monselice" to "PD", "piove di sacco" to "PD", "cittadella" to "PD", "camposampiero" to "PD",
+        "asiago" to "VI", "gallio" to "VI", "roana" to "VI", "lusiana" to "VI", "conco" to "VI",
+        "foza" to "VI", "enego" to "VI", "rotzo" to "VI", "altopiano di asiago" to "VI",
+        "eraclea" to "VE", "jesolo" to "VE", "caorle" to "VE",
+        "scorzè" to "VE", "mirano" to "VE", "spinea" to "VE", "mira" to "VE",
         
         // Comuni del Veronese
         "villafranca di verona" to "VR", "san giovanni lupatoto" to "VR", "san bonifacio" to "VR",

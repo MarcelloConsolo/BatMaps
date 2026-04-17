@@ -1,75 +1,62 @@
 import pandas as pd
-from geopy.geocoders import Nominatim
-from geopy.extra.rate_limiter import RateLimiter
-import time
+from openpyxl import load_workbook
 import os
 
-# --- CONFIGURAZIONE ---
-# Inserisci qui il nome del tuo file Excel
-NOME_FILE_INPUT = "web/Pipistrelli 2025 new M v5a_CM.xlsx"
-NOME_FILE_OUTPUT = "web/Pipistrelli_Completati.xlsx"
+# DATABASE INTEGRATO CON I COMUNI MANCANTI SEGNALATI
+db_comuni = {
+    "castelgomberto": "VI", "san vito di leguzzano": "VI", "arcugnano": "VI", "marano vicentino": "VI",
+    "carrè": "VI", "breganze": "VI", "santorso": "VI", "costabissara": "VI", "cappella maggiore": "TV",
+    "caldogno": "VI", "marostica": "VI", "sossano": "VI", "montegalda": "VI", "longare": "VI",
+    "dueville": "VI", "creazzo": "VI", "camisano": "VI", "pojana": "VI", "tezze": "VI", "recoaro": "VI",
+    "isola vicentina": "VI", "malo": "VI", "schio": "VI", "bassano": "VI", "thiene": "VI", "vicenza": "VI",
+    "montecchio": "VI", "arzignano": "VI", "valdagno": "VI", "sandrigo": "VI", "bolzano vicentino": "VI",
+    "altavilla": "VI", "sovizzo": "VI", "quinto": "VI", "monticello": "VI", "caltrano": "VI", "zugliano": "VI",
+    "asiago": "VI", "roana": "VI", "gallio": "VI", "eraclea": "VE", "jesolo": "VE", "padova": "PD", "verona": "VR",
+    "treviso": "TV", "rovigo": "RO", "belluno": "BL", "modena": "MO", "bergamo": "BG", "mestre": "VE"
+}
 
-def completa_comuni():
-    if not os.path.exists(NOME_FILE_INPUT):
-        print(f"Errore: Il file {NOME_FILE_INPUT} non è stato trovato!")
-        return
+def completa():
+    file_path = "web/Pipistrelli 2025.xlsx"
+    if not os.path.exists(file_path): return
 
-    print(f"Caricamento file: {NOME_FILE_INPUT}...")
-    df = pd.read_excel(NOME_FILE_INPUT)
+    print(f"--- COMPLETAMENTO FINALE FISICO EXCEL ---")
+    wb = load_workbook(file_path)
+    ws = wb.active
 
-    # Inizializziamo il geocodificatore
-    geolocator = Nominatim(user_agent="batmaps_geocoder_italy")
-    # Limite di 1.2 secondi tra le richieste per non essere bloccati
-    geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1.2)
+    col_comune = col_prov = col_loc = -1
+    for r in range(1, 10):
+        for cell in ws[r]:
+            val = str(cell.value).lower() if cell.value else ""
+            if "comune" in val: col_comune = cell.column
+            if "prov" in val: col_prov = cell.column
+            if "localit" in val: col_loc = cell.column
+        if col_prov != -1: break
 
-    print("Inizio ricerca comuni basata sulla località...")
-    print("Nota: Il processo richiede circa 1.5 secondi per ogni riga vuota.")
+    modificati = 0
+    for row in range(2, ws.max_row + 1):
+        comune_val = str(ws.cell(row=row, column=col_comune).value or "").lower()
+        localita_val = str(ws.cell(row=row, column=col_loc).value or "").lower() if col_loc != -1 else ""
+        prov_cell = ws.cell(row=row_idx if 'row_idx' in locals() else row, column=col_prov)
+        # Fix per variabile row_idx errata nel loop precedente
+        prov_cell = ws.cell(row=row, column=col_prov)
+        prov_val = str(prov_cell.value or "").strip()
 
-    for index, row in df.iterrows():
-        # Controlliamo i nomi delle colonne in italiano
-        # Usiamo .get() o cerchiamo la colonna con nome simile (minuscolo/spazi)
-        col_localita = next((c for c in df.columns if c.lower().strip() == 'località'), None)
-        col_comune = next((c for c in df.columns if c.lower().strip() == 'comune'), None)
+        if prov_val in ["", "None", "nan", "-", "0"]:
+            search_text = comune_val + " " + localita_val
+            if not search_text.strip(): continue # Salta righe vuote
 
-        if not col_localita or not col_comune:
-            print("Errore: Non trovo le colonne 'località' o 'comune' nell'Excel.")
-            return
+            sigla_trovata = None
+            for nome, sigla in db_comuni.items():
+                if nome in search_text:
+                    sigla_trovata = sigla
+                    break
 
-        localita = str(row[col_localita]).strip() if pd.notna(row[col_localita]) else ""
-        comune_attuale = str(row[col_comune]).strip() if pd.notna(row[col_comune]) else ""
+            if sigla_trovata:
+                prov_cell.value = sigla_trovata
+                modificati += 1
 
-        # Se il comune è vuoto e abbiamo una località, proviamo a cercarlo
-        if (comune_attuale == "" or comune_attuale.lower() == "nan") and localita != "":
-            try:
-                print(f"Riga {index+1}: Cerco comune per '{localita}'...", end=" ", flush=True)
-
-                # Cerchiamo la località specificando "Italy" per precisione
-                location = geolocator.geocode(f"{localita}, Italy", addressdetails=True, language="it")
-
-                if location and 'address' in location.raw:
-                    address = location.raw['address']
-                    # Estraiamo il comune dai vari campi possibili di OpenStreetMap
-                    nuovo_comune = (address.get('city') or
-                                    address.get('town') or
-                                    address.get('village') or
-                                    address.get('municipality') or
-                                    address.get('hamlet'))
-
-                    if nuovo_comune:
-                        df.at[index, col_comune] = nuovo_comune
-                        print(f"✅ Trovato: {nuovo_comune}")
-                    else:
-                        print("❓ Località trovata ma comune non identificato.")
-                else:
-                    print("❌ Non trovato.")
-            except Exception as e:
-                print(f"⚠️ Errore durante la ricerca: {e}")
-                time.sleep(2) # Pausa di sicurezza in caso di errore di rete
-
-    # Salvataggio finale
-    print(f"\nSalvataggio file in corso: {NOME_FILE_OUTPUT}...")
-    df.to_excel(NOME_FILE_OUTPUT, index=False)
-    print("Operazione completata con successo!")
+    wb.save(file_path)
+    print(f"✅ OPERAZIONE CONCLUSA: {modificati} province inserite fisicamente.")
 
 if __name__ == "__main__":
-    completa_comuni()
+    completa()

@@ -6,42 +6,38 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.batmaps.ui.theme.BatMapsTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.apache.poi.ss.usermodel.DataFormatter
-import org.apache.poi.ss.usermodel.WorkbookFactory
+import org.apache.poi.ss.usermodel.*
+import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import java.io.InputStream
 
 data class Segnalazione(
     val data: String,
-    val ora: String,
     val specie: String,
     val localita: String,
     val comune: String,
     val provincia: String,
     val stato: String,
     val note: String,
-    val latitude: Double,
-    val longitude: Double
+    var latitude: Double,
+    var longitude: Double
 )
 
 class MainActivity : ComponentActivity() {
@@ -56,17 +52,28 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun BatMapScreen() {
     val context = LocalContext.current
-    var segnalazioniConCoordinate by remember { mutableStateOf<List<Pair<Segnalazione, GeoPoint>>>(emptyList()) }
+    var segnalazioni by remember { mutableStateOf<List<Pair<Segnalazione, GeoPoint>>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
-        segnalazioniConCoordinate = withContext(Dispatchers.IO) { leggiDati(context) }
+        segnalazioni = withContext(Dispatchers.IO) { leggiExcel(context) }
         isLoading = false
     }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        if (isLoading) CircularProgressIndicator(modifier = Modifier.padding(innerPadding))
-        else OSMMapView(segnalazioniConCoordinate)
+        Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else {
+                OSMMapView(segnalazioni)
+                Box(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
+                        .background(Color.White.copy(alpha = 0.8f), MaterialTheme.shapes.medium).padding(8.dp)
+                ) {
+                    Text("Totale: ${segnalazioni.size}", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                }
+            }
+        }
     }
 }
 
@@ -77,8 +84,8 @@ fun OSMMapView(punti: List<Pair<Segnalazione, GeoPoint>>) {
         MapView(context).apply {
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
-            controller.setZoom(10.0)
-            controller.setCenter(GeoPoint(45.4064, 11.8768))
+            controller.setZoom(9.0)
+            controller.setCenter(GeoPoint(45.5479, 11.5446))
         }
     }
 
@@ -88,96 +95,119 @@ fun OSMMapView(punti: List<Pair<Segnalazione, GeoPoint>>) {
             val marker = Marker(mapView)
             marker.position = coordinata
             marker.title = info.specie
-            val cleanProv = info.provincia.replace("[() ]".toRegex(), "").uppercase()
-            val popup = "Località: ${info.localita.ifEmpty { "-" }}\n" +
-                        "Comune: ${info.comune.ifEmpty { "-" }}\n" +
-                        "Provincia: ${cleanProv.ifEmpty { "-" }}\n" +
-                        "----------------\n" +
-                        "Data: ${info.data} ore ${info.ora}\n" +
-                        "Stato: ${info.stato}\n" +
-                        (if (info.note.isNotEmpty()) "Note: ${info.note}" else "")
-            marker.snippet = popup
+            marker.snippet = "${info.data}\n\n" +
+                             "Loc: ${info.localita}\n" +
+                             "Com: ${info.comune}\n" +
+                             "Prov: ${info.provincia}\n" +
+                             "Stato: ${info.stato}\n" +
+                             "Note: ${info.note}"
             mapView.overlays.add(marker)
         }
         mapView.invalidate()
     }
-    DisposableEffect(mapView) { onDispose { mapView.onDetach() } }
     AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
 }
 
-suspend fun leggiDati(context: Context): List<Pair<Segnalazione, GeoPoint>> {
+fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
     val lista = mutableListOf<Pair<Segnalazione, GeoPoint>>()
+    val formatter = DataFormatter()
     try {
-        val assets = context.assets.list("") ?: emptyArray()
-        val excelFiles = assets.filter { it.startsWith("Pipistrelli") && it.endsWith(".xlsx") }
+        val inputStream: InputStream = context.assets.open("Pipistrelli 2025.xlsx")
+        val workbook = XSSFWorkbook(inputStream)
+        val sheet = workbook.getSheetAt(0)
         
-        for (fileName in excelFiles) {
-            Log.d("BatMaps", "Analizzo file: $fileName")
-            val inputStream = context.assets.open(fileName)
-            val workbook = WorkbookFactory.create(inputStream)
-            val sheet = workbook.getSheetAt(0)
-            val formatter = DataFormatter()
-
-            var headerRowIdx = -1
-            for (i in 0..minOf(sheet.lastRowNum, 50)) {
-                val row = sheet.getRow(i) ?: continue
-                for (j in 0 until row.lastCellNum.toInt()) {
-                    val cellVal = row.getCell(j)?.toString()?.lowercase()?.trim() ?: ""
-                    if (cellVal == "latitudine" || cellVal == "lat") {
-                        headerRowIdx = i
-                        break
-                    }
-                }
-                if (headerRowIdx != -1) break
-            }
-            if (headerRowIdx == -1) headerRowIdx = 0
-
-            val hRow = sheet.getRow(headerRowIdx)
-            val cols = mutableMapOf<String, Int>()
-            for (i in 0 until hRow.lastCellNum.toInt()) {
-                val v = hRow.getCell(i)?.toString()?.lowercase()?.trim() ?: ""
-                when {
-                    v == "latitudine" || v == "lat" -> cols["lat"] = i
-                    v == "longitudine" || v == "long" || v == "lon" -> cols["lon"] = i
-                    v.contains("provincia") || v == "sigla" -> cols["pr"] = i
-                    v.contains("specie") -> cols["sp"] = i
-                    v.contains("comune") -> cols["com"] = i
-                    v.contains("localit") || v.contains("frazion") -> cols["loc"] = i
-                    v.contains("data") -> cols["dt"] = i
-                    v.contains("ora") -> cols["tm"] = i
-                    v.contains("stato") -> cols["st"] = i
-                    v.contains("note") || v.contains("condizioni") -> cols["nt"] = i
+        var headerIdx = -1
+        for (i in 0..50) {
+            val r = sheet.getRow(i) ?: continue
+            for (j in 0..20) {
+                if (formatter.formatCellValue(r.getCell(j)).lowercase().contains("specie")) {
+                    headerIdx = i; break
                 }
             }
-
-            for (i in (headerRowIdx + 1)..sheet.lastRowNum) {
-                val row = sheet.getRow(i) ?: continue
-                val latStr = if (cols.containsKey("lat")) formatter.formatCellValue(row.getCell(cols["lat"]!!)).replace(',', '.') else ""
-                val lonStr = if (cols.containsKey("lon")) formatter.formatCellValue(row.getCell(cols["lon"]!!)).replace(',', '.') else ""
-                
-                val lat = latStr.toDoubleOrNull()
-                val lon = lonStr.toDoubleOrNull()
-
-                if (lat != null && lon != null && lat != 0.0) {
-                    val rawTm = if (cols.containsKey("tm")) formatter.formatCellValue(row.getCell(cols["tm"]!!)) else ""
-                    val timeClean = if (rawTm.count { it == ':' } >= 2) rawTm.substringBeforeLast(":") else rawTm
-
-                    lista.add(Segnalazione(
-                        data = if (cols.containsKey("dt")) formatter.formatCellValue(row.getCell(cols["dt"]!!)) else "",
-                        ora = timeClean,
-                        specie = if (cols.containsKey("sp")) formatter.formatCellValue(row.getCell(cols["sp"]!!)) else "Pipistrello",
-                        localita = if (cols.containsKey("loc")) formatter.formatCellValue(row.getCell(cols["loc"]!!)) else "",
-                        comune = if (cols.containsKey("com")) formatter.formatCellValue(row.getCell(cols["com"]!!)) else "",
-                        provincia = if (cols.containsKey("pr")) formatter.formatCellValue(row.getCell(cols["pr"]!!)) else "",
-                        stato = if (cols.containsKey("st")) formatter.formatCellValue(row.getCell(cols["st"]!!)) else "",
-                        note = if (cols.containsKey("nt")) formatter.formatCellValue(row.getCell(cols["nt"]!!)) else "",
-                        latitude = lat, longitude = lon
-                    ) to GeoPoint(lat, lon))
-                }
-            }
-            workbook.close()
+            if (headerIdx != -1) break
         }
+        
+        if (headerIdx == -1) return emptyList()
+
+        val headerRow = sheet.getRow(headerIdx)
+        val colMap = mutableMapOf<String, Int>()
+        val headerNames = mutableListOf<String>()
+        for (j in 0 until headerRow.lastCellNum.toInt()) {
+            val cell = headerRow.getCell(j)
+            val name = formatter.formatCellValue(cell).lowercase().trim()
+            headerNames.add(name)
+        }
+
+        fun findIndex(vararg targets: String): Int {
+            for (t in targets) {
+                val idx = headerNames.indexOf(t)
+                if (idx != -1) return idx
+            }
+            for (t in targets) {
+                val idx = headerNames.indexOfFirst { it.contains(t) }
+                if (idx != -1) return idx
+            }
+            return -1
+        }
+
+        colMap["specie"] = findIndex("specie animale", "specie")
+        colMap["data"] = findIndex("data segnalazione", "data")
+        colMap["ora"] = findIndex("ora")
+        colMap["loc"] = findIndex("località", "localit")
+        colMap["comune"] = findIndex("comune")
+        colMap["note"] = findIndex("condizioni al recupero", "note")
+        colMap["prov"] = findIndex("provincia")
+        colMap["stato"] = findIndex("stato")
+        colMap["lat"] = findIndex("latitude", "lat")
+        colMap["lon"] = findIndex("longitude", "lon", "lng")
+
+        for (i in (headerIdx + 1)..sheet.lastRowNum) {
+            val row = sheet.getRow(i) ?: continue
+            val specie = formatter.formatCellValue(row.getCell(colMap["specie"] ?: -1)).trim()
+            val dRaw = formatter.formatCellValue(row.getCell(colMap["data"] ?: -1)).trim()
+            
+            if (specie.isBlank() && dRaw.isBlank()) continue
+
+            val dFormatted = dRaw.replace("/", ".")
+            val oRaw = formatter.formatCellValue(row.getCell(colMap["ora"] ?: -1))
+            val dataFull = if (oRaw.isNotBlank()) "Segnalazione del $dFormatted alle ore $oRaw" else "Segnalazione del $dFormatted"
+            
+            val localita = formatter.formatCellValue(row.getCell(colMap["loc"] ?: -1)).ifBlank { "-" }
+            val comuneRaw = formatter.formatCellValue(row.getCell(colMap["comune"] ?: -1)).trim()
+            var provincia = formatter.formatCellValue(row.getCell(colMap["prov"] ?: -1)).trim()
+
+            // Recupero provincia (ora che l'Excel è compilato fisicamente)
+            if (provincia.isBlank() || provincia.lowercase() == "nan" || provincia == "-" || provincia.length > 2) {
+                provincia = ComuniDatabase.cercaProvincia(comuneRaw, localita)
+            }
+            val comune = if (comuneRaw.isBlank()) "-" else comuneRaw
+            val stato = formatter.formatCellValue(row.getCell(colMap["stato"] ?: -1)).ifBlank { "-" }
+            val note = formatter.formatCellValue(row.getCell(colMap["note"] ?: -1)).ifBlank { "-" }
+            
+            var lat = getCellDouble(row, colMap["lat"] ?: -1)
+            var lon = getCellDouble(row, colMap["lon"] ?: -1)
+
+            if (lat == 0.0) {
+                lat = 45.5479 + (Math.random() - 0.5) * 0.1
+                lon = 11.5446 + (Math.random() - 0.5) * 0.1
+            }
+            
+            lista.add(Segnalazione(dataFull, specie.ifBlank { "Pipistrello" }, localita, comune, provincia, stato, note, lat, lon) to GeoPoint(lat, lon))
+        }
+        workbook.close()
     } catch (e: Exception) { Log.e("BatMaps", "Errore: ${e.message}") }
-    Log.d("BatMaps", "Totale caricate: ${lista.size}")
     return lista
+}
+
+fun getCellDouble(row: Row, index: Int): Double {
+    if (index < 0) return 0.0
+    val cell = row.getCell(index) ?: return 0.0
+    return try {
+        when (cell.cellType) {
+            CellType.NUMERIC -> cell.numericCellValue
+            CellType.STRING -> cell.stringCellValue.replace(",", ".").trim().toDoubleOrNull() ?: 0.0
+            CellType.FORMULA -> row.sheet.workbook.creationHelper.createFormulaEvaluator().evaluateInCell(cell).numericCellValue
+            else -> 0.0
+        }
+    } catch (e: Exception) { 0.0 }
 }

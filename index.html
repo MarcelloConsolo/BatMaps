@@ -79,12 +79,30 @@ async function init(){
 
     const file=await (await fetch('web/Pipistrelli 2025.xlsx?v='+Date.now())).arrayBuffer()
     const wb=XLSX.read(new Uint8Array(file),{type:'array'})
-    const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1})
+    const sheet=wb.Sheets[wb.SheetNames[0]]
+    const rows=XLSX.utils.sheet_to_json(sheet,{header:1})
 
-    const header=rows[0].map(h=>String(h).toLowerCase())
-    const data=rows.slice(1)
+    /* HEADER INTELLIGENTE (FIX CRITICO) */
+    let hIdx=0
+    for(let i=0;i<rows.length && i<20;i++){
+        if(rows[i]?.some(c=>{
+            let s=String(c||"").toLowerCase()
+            return s.includes("specie") || s.includes("data")
+        })){
+            hIdx=i
+            break
+        }
+    }
 
-    const col=t=>header.findIndex(h=>t.some(x=>h.includes(x)))
+    const header=rows[hIdx].map(h=>String(h||"").toLowerCase())
+    const data=rows.slice(hIdx+1)
+
+    const col=t=>{
+        for(let i=0;i<header.length;i++)
+            for(let x of t)
+                if(header[i]?.includes(x)) return i
+        return -1
+    }
 
     const c={
         specie:col(["specie"]),
@@ -101,7 +119,7 @@ async function init(){
     let count=0
 
     data.forEach(r=>{
-        if(!r) return
+        if(!r || r.length<2) return
 
         const comRaw=String(r[c.com]||"").trim()
         const locRaw=String(r[c.loc]||"").trim()
@@ -110,7 +128,7 @@ async function init(){
         const match=idx[key] || fuzzy(key,idx)
 
         let lat=parseFloat(String(r[c.lat]||"").replace(",","."))
-        let lon=parseFloat(String(r[c.lon]||"").replace(",","."))
+        let lon=parseFloat(String(r[c.lon]||"").replace(",","."));
 
         if(isNaN(lat)||isNaN(lon)){
             if(match){
@@ -122,15 +140,18 @@ async function init(){
             }
         }
 
-        const locDisplay = locRaw && locRaw !== comRaw ? locRaw : (locRaw || comRaw)
+        /* FIX LOCALITÀ */
+        let locDisplay = "-"
+        if(locRaw && locRaw !== "") locDisplay = locRaw
+        else if(comRaw) locDisplay = comRaw
 
         const marker=L.marker([lat,lon]).bindPopup(`
             <b>${r[c.specie]||"Pipistrello"}</b><br>
             Località: ${locDisplay}<br>
-            Comune: ${comRaw}<br>
-            Provincia: ${r[c.prov]||""}<br>
-            Stato: ${r[c.stato]||""}<br>
-            Condizioni: ${r[c.note]||""}
+            Comune: ${comRaw||"-"}<br>
+            Provincia: ${r[c.prov]||"-"}<br>
+            Stato: ${r[c.stato]||"-"}<br>
+            Condizioni: ${r[c.note]||"-"}
         `)
 
         cluster.addLayer(marker)
@@ -138,6 +159,8 @@ async function init(){
     })
 
     map.addLayer(cluster)
+    if(count>0) map.fitBounds(cluster.getBounds())
+
     document.getElementById("counter").innerText="Totale: "+count
     document.getElementById("status").innerText="OK"
 }

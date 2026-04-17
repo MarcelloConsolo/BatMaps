@@ -34,8 +34,9 @@ def genera():
         # Comuni specifici
         'teolo': (45.3512, 11.7135),
         'montegrotto terme': (45.3340, 11.7820),
-        'abbano terme': (45.3594, 11.7894),
-        'boara pisana': (45.1118, 11.7831)
+        'abano terme': (45.3594, 11.7894),
+        'boara pisana': (45.1118, 11.7831),
+        'galzignano terme': (45.3087, 11.7323)
     }
 
     input_path = 'comuni_db_extracted/FREE/italy_cities.json'

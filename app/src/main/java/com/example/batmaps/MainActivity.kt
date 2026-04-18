@@ -381,16 +381,16 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
 
             for (nome in nomiDaRimuovere) {
                 if (nome.length < 3) continue
+                // Rimuove il nome del comune in modo aggressivo (case insensitive)
                 val escaped = Regex.escape(nome)
-                // Rimuove il nome del comune circondato da virgole, spazi o inizio/fine riga
-                val regex = Regex("[,\\s]*\\b$escaped\\b[,\\s]*", RegexOption.IGNORE_CASE)
-                localitaDisplay = localitaDisplay.replace(regex, " ").trim()
+                localitaDisplay = localitaDisplay.replace(Regex(escaped, RegexOption.IGNORE_CASE), "")
             }
 
-            // Pulizia finale di eventuali virgole residue all'inizio o alla fine
+            // Pulizia finale di eventuali virgole o spazi rimasti (es: ", , " -> " ")
             localitaDisplay = localitaDisplay
-                .replace(Regex("^[,\\s]+"), "")
-                .replace(Regex("[,\\s]+$"), "")
+                .replace(Regex("[,\\s]+"), " ") // Converte sequenze di virgole/spazi in un singolo spazio
+                .replace(Regex("^[,\\s]+"), "") // Pulisce l'inizio
+                .replace(Regex("[,\\s]+$"), "") // Pulisce la fine
                 .trim()
 
             if (localitaDisplay.isBlank()) localitaDisplay = "-"

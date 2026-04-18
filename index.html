@@ -172,7 +172,31 @@ async function init() {
             let vProv = (vProvOrig && vProvOrig !== "-") ? vProvOrig : res.prov;
             let vComDisp = (vComRaw && vComRaw !== "-") ? vComRaw : res.nome;
 
-            let vLocDisp = vLocRaw && vLocRaw !== "" ? vLocRaw : vComDisp;
+            // --- PULIZIA LOCALITÀ AGGRESSIVA ---
+            let vLocDisp = vLocRaw && vLocRaw !== "" ? vLocRaw : "";
+            const nomiDaRimuovere = new Set();
+            if (vComDisp && vComDisp !== "-") nomiDaRimuovere.add(vComDisp.toLowerCase());
+            if (res.nome) nomiDaRimuovere.add(res.nome.toLowerCase());
+
+            nomiDaRimuovere.forEach(nome => {
+                if (nome.length < 3) return;
+                const regex = new RegExp(nome.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'gi');
+                vLocDisp = vLocDisp.replace(regex, "");
+            });
+
+            // Pulizia finale punteggiatura e spazi
+            vLocDisp = vLocDisp
+                .replace(/[, \s]+/g, " ")
+                .replace(/^[, \s]+/, "")
+                .replace(/[, \s]+$/, "")
+                .trim();
+
+            if (!vLocDisp || vLocDisp.toLowerCase() === vComDisp.toLowerCase()) {
+                vLocDisp = "-";
+            } else {
+                vLocDisp = vLocDisp.charAt(0).toUpperCase() + vLocDisp.slice(1);
+            }
+            // -----------------------------------
 
             let vData = "-";
             if (vDataRaw) {

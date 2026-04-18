@@ -47,22 +47,18 @@ data class Segnalazione(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Configuration.getInstance().userAgentValue = "BatMapsApp/4.0"
+        Configuration.getInstance().userAgentValue = "BatMapsApp/18.10"
         enableEdgeToEdge()
         setContent { BatMapsTheme { BatMapScreen() } }
     }
 }
 
-// Interrogazione ESCLUSIVA a Nominatim
-suspend fun getCoordinatesFromNominatim(address: String, city: String): Pair<Double, Double>? = withContext(Dispatchers.IO) {
+suspend fun getCoordinatesFromNominatim(queryText: String): Pair<Double, Double>? = withContext(Dispatchers.IO) {
     return@withContext try {
-        // Pulizia query: se l'indirizzo contiene già il comune, non lo duplichiamo
-        val queryText = if (address.lowercase().contains(city.lowercase())) address else "$address, $city"
         val query = URLEncoder.encode(queryText, "UTF-8")
         val url = URL("https://nominatim.openstreetmap.org/search?q=$query&format=json&limit=1")
-        
         val conn = url.openConnection() as HttpURLConnection
-        conn.setRequestProperty("User-Agent", "BatMapsApp/4.0")
+        conn.setRequestProperty("User-Agent", "BatMapsApp/18.10")
         conn.connectTimeout = 5000
         
         val response = conn.inputStream.bufferedReader().use { it.readText() }
@@ -79,46 +75,51 @@ suspend fun getCoordinatesFromNominatim(address: String, city: String): Pair<Dou
 @Composable
 fun BatMapScreen() {
     val context = LocalContext.current
-    var tutteLeSegnalazioni by remember { mutableStateOf<List<Pair<Segnalazione, GeoPoint>>>(emptyList()) }
+    val tutteLeSegnalazioni = remember { mutableStateListOf<Pair<Segnalazione, GeoPoint>>() }
     var isLoading by remember { mutableStateOf(true) }
     var statusMessage by remember { mutableStateOf("Inizializzazione...") }
     
     LaunchedEffect(Unit) {
         ComuniDatabase.initialize(context)
-        statusMessage = "Connessione a Nominatim..."
-        tutteLeSegnalazioni = leggiExcel(context) { msg -> statusMessage = msg }
-        isLoading = false
+        leggiExcelIncrementale(context, 
+            onProgress = { statusMessage = it },
+            onNewPoint = { tutteLeSegnalazioni.add(it) },
+            onComplete = { isLoading = false }
+        )
     }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            if (isLoading) {
-                Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(statusMessage, style = MaterialTheme.typography.bodyLarge)
-                }
-            } else {
-                OSMMapView(tutteLeSegnalazioni)
+            OSMMapView(tutteLeSegnalazioni.toList())
 
-                // Tag Versione in alto a destra (come richiesto)
+            if (isLoading) {
                 Surface(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(16.dp),
-                    color = Color.White.copy(alpha = 0.9f),
-                    shape = MaterialTheme.shapes.medium,
-                    shadowElevation = 8.dp,
-                    border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFF2c3e50))
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp).fillMaxWidth(0.8f),
+                    color = Color.Black.copy(alpha = 0.7f),
+                    shape = MaterialTheme.shapes.medium
                 ) {
-                    Text(
-                        text = "BatMaps 2025 - v18.00",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color(0xFF2c3e50),
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                    )
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text(statusMessage, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
+            }
+
+            Surface(
+                modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
+                color = Color.White.copy(alpha = 0.9f),
+                shape = MaterialTheme.shapes.medium,
+                shadowElevation = 4.dp,
+                border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFF2c3e50))
+            ) {
+                Text(
+                    text = "BatMaps 2025 - v18.10",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color(0xFF2c3e50),
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                )
             }
         }
     }
@@ -136,7 +137,7 @@ fun OSMMapView(punti: List<Pair<Segnalazione, GeoPoint>>) {
         }
     }
 
-    LaunchedEffect(punti) {
+    LaunchedEffect(punti.size) {
         mapView.overlays.clear()
         punti.forEach { (info, coordinata) ->
             val marker = Marker(mapView)
@@ -148,17 +149,20 @@ fun OSMMapView(punti: List<Pair<Segnalazione, GeoPoint>>) {
                 else -> android.graphics.Color.BLUE
             }
             marker.icon.mutate().setTint(color)
-            marker.snippet = "Data: ${info.data}\nLoc: ${info.localita}\nCom: ${info.comune}\nNote: ${info.note}"
+            marker.snippet = "Data: ${info.data}\nLoc: ${info.localita}\nCom: ${info.comune}"
             mapView.overlays.add(marker)
         }
-        if (punti.isNotEmpty()) mapView.controller.animateTo(punti.last().second)
         mapView.invalidate()
     }
     AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
 }
 
-suspend fun leggiExcel(context: Context, onProgress: (String) -> Unit): List<Pair<Segnalazione, GeoPoint>> = withContext(Dispatchers.IO) {
-    val lista = mutableListOf<Pair<Segnalazione, GeoPoint>>()
+suspend fun leggiExcelIncrementale(
+    context: Context, 
+    onProgress: (String) -> Unit, 
+    onNewPoint: (Pair<Segnalazione, GeoPoint>) -> Unit,
+    onComplete: () -> Unit
+) = withContext(Dispatchers.IO) {
     val formatter = DataFormatter()
     try {
         val inputStream: InputStream = context.assets.open("Pipistrelli 2025.xlsx")
@@ -166,11 +170,11 @@ suspend fun leggiExcel(context: Context, onProgress: (String) -> Unit): List<Pai
         val sheet = workbook.getSheetAt(0)
         
         var headerIdx = -1
-        for (i in 0..10) {
+        for (i in 0..15) {
             val r = sheet.getRow(i) ?: continue
             if (formatter.formatCellValue(r.getCell(0)).lowercase().contains("specie")) { headerIdx = i; break }
         }
-        if (headerIdx == -1) return@withContext emptyList()
+        if (headerIdx == -1) return@withContext
 
         val headerRow = sheet.getRow(headerIdx)
         val colMap = mutableMapOf<String, Int>()
@@ -184,42 +188,39 @@ suspend fun leggiExcel(context: Context, onProgress: (String) -> Unit): List<Pai
             if (name.contains("note") || name.contains("condizioni")) colMap["note"] = j
         }
 
-        val rows = (headerIdx + 1)..sheet.lastRowNum
-        for (i in rows) {
+        for (i in (headerIdx + 1)..sheet.lastRowNum) {
             val row = sheet.getRow(i) ?: continue
             val locRaw = formatter.formatCellValue(row.getCell(colMap["loc"] ?: -1)).trim()
             val comRaw = formatter.formatCellValue(row.getCell(colMap["comune"] ?: -1)).trim()
             if (locRaw.isBlank() && comRaw.isBlank()) continue
 
-            // Normalizzazione nomi
-            val res = ComuniDatabase.cercaDati(comRaw, locRaw, "")
-            val comuneDisplay = res.nome.replaceFirstChar { it.uppercase() }
-            var localitaDisplay = locRaw.replace('\u00A0', ' ').trim()
+            onProgress("Cerco: ${locRaw.ifBlank { comRaw }}...")
+
+            // TENTATIVO 1: Via + Comune
+            var coords = getCoordinatesFromNominatim(if (locRaw.isNotBlank()) "$locRaw, $comRaw" else comRaw)
             
-            // Pulizia località
-            if (localitaDisplay.lowercase().contains(res.nome.lowercase()) && localitaDisplay.lowercase() != res.nome.lowercase()) {
-                localitaDisplay = localitaDisplay.replace(Regex("[,\\s]*${Regex.escape(res.nome)}[,\\s]*", RegexOption.IGNORE_CASE), " ").trim()
+            // TENTATIVO 2: Solo Comune (Fallback se la via non viene trovata)
+            if (coords == null && locRaw.isNotBlank()) {
+                coords = getCoordinatesFromNominatim(comRaw)
             }
-            if (localitaDisplay.isBlank()) localitaDisplay = comuneDisplay
-
-            onProgress("Geocodifica: $localitaDisplay...")
-
-            // UNICA FONTE COORDINATE: NOMINATIM
-            val coords = getCoordinatesFromNominatim(localitaDisplay, comuneDisplay)
             
             if (coords != null) {
-                val data = formatter.formatCellValue(row.getCell(colMap["data"] ?: -1))
-                val specie = formatter.formatCellValue(row.getCell(colMap["specie"] ?: -1))
-                val stato = formatter.formatCellValue(row.getCell(colMap["stato"] ?: -1))
-                val note = formatter.formatCellValue(row.getCell(colMap["note"] ?: -1))
-                
-                lista.add(Segnalazione(data, specie, localitaDisplay, comuneDisplay, stato, note, coords.first, coords.second) to GeoPoint(coords.first, coords.second))
-                
-                // Delay per rispettare i termini d'uso di Nominatim (max 1 req/sec consigliata)
-                delay(800) 
+                val point = Pair(
+                    Segnalazione(
+                        formatter.formatCellValue(row.getCell(colMap["data"] ?: -1)),
+                        formatter.formatCellValue(row.getCell(colMap["specie"] ?: -1)),
+                        locRaw, comRaw,
+                        formatter.formatCellValue(row.getCell(colMap["stato"] ?: -1)),
+                        formatter.formatCellValue(row.getCell(colMap["note"] ?: -1)),
+                        coords.first, coords.second
+                    ),
+                    GeoPoint(coords.first, coords.second)
+                )
+                withContext(Dispatchers.Main) { onNewPoint(point) }
+                delay(1000) // Rispetto limiti Nominatim
             }
         }
         workbook.close()
-    } catch (e: Exception) { Log.e("BatMaps", "Errore: ${e.message}") }
-    return@withContext lista
+    } catch (e: Exception) { Log.e("BatMaps", "Errore Excel: ${e.message}") }
+    withContext(Dispatchers.Main) { onComplete() }
 }

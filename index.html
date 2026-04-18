@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BatMaps 2025 - v18.10</title>
+    <title>BatMaps 2025 - v18.20</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -35,7 +35,7 @@
 </head>
 <body>
 
-<div class="version-tag">BatMaps 2025 - v18.10</div>
+<div class="version-tag">BatMaps 2025 - v18.20</div>
 
 <div id="status" class="status-overlay">
     <div class="spinner"></div>
@@ -52,23 +52,35 @@
 
     async function getCoordinates(query) {
         try {
-            const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`;
-            const resp = await fetch(url, { headers: { 'User-Agent': 'BatMapsWeb/18.10' } });
+            // Aggiunta email per policy Nominatim e rimosso User-Agent manuale (bloccato dai browser)
+            const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&email=marcello.consolo@gmail.com`;
+            const resp = await fetch(url);
             const data = await resp.json();
             return (data && data.length > 0) ? { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) } : null;
-        } catch (e) { return null; }
+        } catch (e) {
+            console.error("Errore geocodifica:", e);
+            return null;
+        }
     }
 
     async function init() {
         try {
             const statusMsg = document.getElementById("status-msg");
+            // Caricamento Excel diretto da GitHub
             const resp = await fetch('https://raw.githubusercontent.com/marcelloconsolo/BatMaps/main/app/src/main/assets/Pipistrelli%202025.xlsx');
-            const workbook = XLSX.read(new Uint8Array(await resp.arrayBuffer()), { type: 'array' });
+            const arrayBuffer = await resp.arrayBuffer();
+            const workbook = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
             const sheet = workbook.Sheets[workbook.SheetNames[0]];
             const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
             let hIdx = -1;
-            for(let i=0; i<20; i++) if(jsonData[i]?.join("").toLowerCase().includes("specie")) { hIdx = i; break; }
+            for(let i=0; i<30; i++) {
+                if(jsonData[i] && jsonData[i].join("").toLowerCase().includes("specie")) { hIdx = i; break; }
+            }
+            if(hIdx === -1) {
+                statusMsg.innerText = "Errore: intestazione non trovata";
+                return;
+            }
 
             const rows = XLSX.utils.sheet_to_json(sheet, { range: hIdx });
             const markers = [];
@@ -77,9 +89,11 @@
                 const row = rows[i];
                 const loc = String(row["Località"] || "").trim();
                 const com = String(row["Comune"] || "").trim();
+                const specie = String(row["Specie"] || "Pipistrello");
+
                 if (!loc && !com) continue;
 
-                statusMsg.innerText = `Cerco: ${loc || com} (${i+1}/${rows.length})`;
+                statusMsg.innerText = `Processo ${i+1}/${rows.length}: ${loc || com}`;
 
                 // Tentativo 1: Via + Comune, Tentativo 2: Solo Comune
                 let coords = await getCoordinates(loc ? `${loc}, ${com}` : com);
@@ -90,6 +104,7 @@
                     const s = String(row["Stato"] || "").toLowerCase();
                     if (s.includes("liberato")) color = "green";
                     else if (s.includes("morto")) color = "red";
+                    else if (s.includes("degenza")) color = "yellow";
 
                     const icon = new L.Icon({
                         iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
@@ -98,14 +113,18 @@
                     });
 
                     L.marker([coords.lat, coords.lon], { icon }).addTo(map)
-                        .bindPopup(`<b>${row["Specie"] || "Pipistrello"}</b><br><table class="popup-table"><tr><td class="label">Loc:</td><td>${loc}</td></tr><tr><td class="label">Com:</td><td>${com}</td></tr></table>`);
+                        .bindPopup(`<b>${specie}</b><br><table class="popup-table"><tr><td class="label">Loc:</td><td>${loc}</td></tr><tr><td class="label">Com:</td><td>${com}</td></tr><tr><td class="label">Stato:</td><td>${row["Stato"] || "-"}</td></tr></table>`);
                     markers.push([coords.lat, coords.lon]);
                 }
-                await new Promise(r => setTimeout(r, 1000));
+                // Rispetto limite Nominatim
+                await new Promise(r => setTimeout(r, 1200));
             }
             document.getElementById("status").style.display = "none";
             if (markers.length > 0) map.fitBounds(markers);
-        } catch (e) { document.getElementById("status-msg").innerText = "Errore caricamento"; }
+        } catch (e) {
+            console.error("Errore inizializzazione:", e);
+            document.getElementById("status-msg").innerText = "Errore critico caricamento";
+        }
     }
     init();
 </script>

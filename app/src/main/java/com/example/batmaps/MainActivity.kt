@@ -365,21 +365,28 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
             // Ottieni dati dal database (cercaDati già controlla se la località contiene un comune)
             val res = ComuniDatabase.cercaDati(comuneRaw, localitaRaw, provinciaRaw)
             
-            // 1. IL COMUNE: Priorità al database (che ha già estratto il comune dalla località se mancava)
-            val comuneDisplay = res.nome.split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+            // 1. IL COMUNE: Lo prendiamo dal database (standardizzato)
+            val comuneDisplay = res.nome.split(" ").joinToString(" ") { it.replaceFirstChar { c -> if (c.isLowerCase()) c.titlecase(Locale.getDefault()) else c.toString() } }
 
-            // 2. LA LOCALITÀ: Rimuoviamo il nome del comune trovato (spostandolo idealmente di riga)
-            var localitaDisplay = localitaRaw
-            val paroleComune = res.nome.split(Regex("[,\\s-]+")).filter { it.length > 2 }
-            
-            if (paroleComune.isNotEmpty()) {
-                val pattern = paroleComune.joinToString("[\\s,.-]+") { Regex.escape(it) }
-                localitaDisplay = localitaDisplay.replace(Regex(pattern, RegexOption.IGNORE_CASE), "")
+            // 2. LA LOCALITÀ: Rimuoviamo il comune in modo aggressivo
+            var localitaDisplay = localitaRaw.replace('\u00A0', ' ')
+            val daRimuovere = mutableSetOf<String>()
+            daRimuovere.add(res.nome.lowercase())
+            if (comuneRaw.isNotBlank() && comuneRaw != "-") daRimuovere.add(comuneRaw.lowercase())
+
+            for (s in daRimuovere) {
+                if (s.length < 3) continue
+                // Rimuove la stringa intera (es. "Galzignano Terme")
+                localitaDisplay = localitaDisplay.replace(s, "", ignoreCase = true)
+                // Rimuove anche le singole parole componenti (es. "Galzignano") per sicurezza
+                s.split(Regex("[\\s,.-]+")).filter { it.length > 3 }.forEach { parola ->
+                    localitaDisplay = localitaDisplay.replace(Regex("\\b${Regex.escape(parola)}\\b", RegexOption.IGNORE_CASE), "")
+                }
             }
 
-            // Pulizia finale della località
+            // Pulizia finale della località: rimuove punteggiatura orfana e spazi doppi
             localitaDisplay = localitaDisplay
-                .replace(Regex("[,\\s]+"), " ")
+                .replace(Regex("[,\\s.-]+"), " ")
                 .replace(Regex("^[,\\s.-]+"), "")
                 .replace(Regex("[,\\s.-]+$"), "")
                 .trim()

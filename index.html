@@ -192,17 +192,20 @@ async function init() {
             if (vComDisp && vComDisp !== "-") nomiDaRimuovere.add(vComDisp.toLowerCase());
             if (res.nome) nomiDaRimuovere.add(res.nome.toLowerCase());
 
-            nomiDaRimuovere.forEach(nome => {
-                const parole = nome.split(/[\s,.-]+/).filter(p => p.length > 2);
-                if (parole.length === 0) return;
-                const pattern = parole.map(p => p.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join("[\\s,.-]+");
-                const regex = new RegExp(pattern, 'gi');
-                vLocDisp = vLocDisp.replace(regex, "");
-            });
+            if (vLocDisp.toLowerCase().includes(res.nome.toLowerCase())) {
+                const regex = new RegExp(`[,\\s]*${res.nome.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}[,\\s]*`, 'gi');
+                let pulita = vLocDisp.replace(regex, " ").trim();
 
-            // Pulizia finale punteggiatura e spazi
+                // Se dopo la pulizia rimane qualcosa (es. la via), usiamo la versione pulita.
+                // Se invece non rimane nulla, significa che la località conteneva SOLO il comune:
+                // in questo caso la LASCIAMO (non mettiamo il trattino).
+                if (pulita.length > 0) {
+                    vLocDisp = pulita;
+                }
+            }
+
+            // Pulizia finale
             vLocDisp = vLocDisp
-                .replace(/[, \s.-]+/g, " ")
                 .replace(/^[, \s.-]+/, "")
                 .replace(/[, \s.-]+$/, "")
                 .trim();

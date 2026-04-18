@@ -362,39 +362,28 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
             val comuneRaw = formatter.formatCellValue(row.getCell(colMap["comune"] ?: -1)).trim()
             val provinciaRaw = formatter.formatCellValue(row.getCell(colMap["prov"] ?: -1)).trim()
 
-            // Ottieni dati dal database
+            // Ottieni dati dal database (cercaDati estrae il comune se manca)
             val res = ComuniDatabase.cercaDati(comuneRaw, localitaRaw, provinciaRaw)
             
             // 1. IL COMUNE: Standardizzato dal database
             val comuneDisplay = res.nome.split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
 
-            // 2. LA LOCALITÀ: Spostamento condizionale
+            // 2. LA LOCALITÀ: Conservativa
+            // Come richiesto: se nella località c'è il comune, lo lasciamo. 
+            // Non facciamo più pulizie aggressive che rischiano di svuotare il campo.
             var localitaDisplay = localitaRaw.replace('\u00A0', ' ').trim()
-            
-            // Proviamo a rimuovere il comune dalla località solo se c'è altro testo (es. la via)
-            val comuneLower = res.nome.lowercase()
-            val localitaLower = localitaDisplay.lowercase()
-            
-            if (localitaLower.contains(comuneLower)) {
-                // Rimuoviamo il comune e la punteggiatura circostante
-                val regex = Regex("[,\\s]*${Regex.escape(comuneLower)}[,\\s]*", RegexOption.IGNORE_CASE)
-                val pulita = localitaDisplay.replace(regex, " ").trim()
-                
-                // Se dopo la pulizia rimane qualcosa (es. "Via Roma 1"), usiamo la versione pulita
-                // Se invece non rimane nulla, significa che la località ERA il comune: in questo caso mettiamo "-"
-                localitaDisplay = if (pulita.isBlank() || pulita == localitaDisplay) {
-                    if (localitaLower == comuneLower) "-" else localitaDisplay
-                } else {
-                    pulita
-                }
+
+            if (localitaDisplay.isBlank() || localitaDisplay == "-") {
+                // Se la località è proprio vuota, usiamo il nome del comune come fallback per non lasciare il campo vuoto
+                localitaDisplay = comuneDisplay
             }
 
-            // Pulizia finale
+            // Pulizia minima solo di spazi/punteggiatura estrema
             localitaDisplay = localitaDisplay
                 .replace(Regex("^[,\\s.-]+"), "")
                 .replace(Regex("[,\\s.-]+$"), "")
                 .trim()
-                .ifBlank { "-" }
+                .ifBlank { comuneDisplay } // Se ancora vuoto, metti il comune
                 .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 
             var lat = getCellDouble(row, colMap["lat"] ?: -1)

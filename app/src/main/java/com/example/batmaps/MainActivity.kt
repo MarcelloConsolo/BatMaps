@@ -360,32 +360,41 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
             
             val localitaRaw = formatter.formatCellValue(row.getCell(colMap["loc"] ?: -1)).trim()
             val comuneRaw = formatter.formatCellValue(row.getCell(colMap["comune"] ?: -1)).trim()
-                .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+                .split(" ").joinToString(" ") { it.replaceFirstChar { c -> if (c.isLowerCase()) c.titlecase(Locale.getDefault()) else c.toString() } }
             val provinciaRaw = formatter.formatCellValue(row.getCell(colMap["prov"] ?: -1)).trim()
 
             // Ottieni dati dal database basato sulla priorità: Comune -> Località -> Provincia
             val res = ComuniDatabase.cercaDati(comuneRaw, localitaRaw, provinciaRaw)
             
-            // Se il comune nell'Excel è vuoto o "-", ma abbiamo trovato un comune nel testo della località, usiamolo!
+            // 1. Comune da visualizzare (tutte le parole maiuscole)
             val comuneDisplay = if (comuneRaw.isBlank() || comuneRaw == "-") {
-                res.nome.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+                res.nome.split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
             } else {
                 comuneRaw
             }
 
-            // PULIZIA VISIVA: Rimuoviamo il nome del comune dalla stringa della località per il display
+            // 2. PULIZIA LOCALITÀ: Rimuoviamo il nome del comune dalla stringa della località
             var localitaDisplay = localitaRaw
-            if (comuneDisplay.isNotBlank()) {
-                // Regex avanzata per rimuovere il nome del comune come parola intera
-                val escapedComune = Regex.escape(comuneDisplay)
-                val regex = Regex("\\b$escapedComune\\b", RegexOption.IGNORE_CASE)
-                localitaDisplay = localitaDisplay.replace(regex, "")
-                    .replace(Regex("[\\s,]+$"), "") 
-                    .replace(Regex("^[\\s,]+"), "")
-                    .trim()
-                    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+            val nomiDaRimuovere = mutableSetOf<String>()
+            if (comuneDisplay.isNotBlank() && comuneDisplay != "-") nomiDaRimuovere.add(comuneDisplay)
+            if (res.nome.isNotBlank()) nomiDaRimuovere.add(res.nome)
+
+            for (nome in nomiDaRimuovere) {
+                if (nome.length < 3) continue
+                val escaped = Regex.escape(nome)
+                // Rimuove il nome del comune circondato da virgole, spazi o inizio/fine riga
+                val regex = Regex("[,\\s]*\\b$escaped\\b[,\\s]*", RegexOption.IGNORE_CASE)
+                localitaDisplay = localitaDisplay.replace(regex, " ").trim()
             }
+
+            // Pulizia finale di eventuali virgole residue all'inizio o alla fine
+            localitaDisplay = localitaDisplay
+                .replace(Regex("^[,\\s]+"), "")
+                .replace(Regex("[,\\s]+$"), "")
+                .trim()
+
             if (localitaDisplay.isBlank()) localitaDisplay = "-"
+            else localitaDisplay = localitaDisplay.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 
             var lat = getCellDouble(row, colMap["lat"] ?: -1)
             var lon = getCellDouble(row, colMap["lon"] ?: -1)

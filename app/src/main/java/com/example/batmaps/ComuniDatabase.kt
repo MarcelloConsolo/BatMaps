@@ -13,6 +13,7 @@ object ComuniDatabase {
 
     data class ComuneInfo(
         val prov: String,
+        val reg: String,
         val lat: Double,
         val lon: Double,
         val residenti: Int,
@@ -37,6 +38,7 @@ object ComuniDatabase {
                 val item = jsonObject.getJSONObject(key)
                 tempMap[key] = ComuneInfo(
                     prov = item.getString("prov"),
+                    reg = item.optString("reg", "-"),
                     lat = item.getDouble("lat"),
                     lon = item.getDouble("lon"),
                     residenti = item.optInt("res", 0),
@@ -51,7 +53,7 @@ object ComuniDatabase {
         }
     }
 
-    data class Result(val nome: String, val prov: String, val lat: Double, val lon: Double)
+    data class Result(val nome: String, val prov: String, val reg: String, val lat: Double, val lon: Double)
 
     fun cercaDati(comune: String, localita: String, provincia: String): Result {
         val p = provincia.uppercase().trim()
@@ -60,13 +62,13 @@ object ComuniDatabase {
 
         // 1. Priorità: Comune esatto nel DB
         databaseCompleto[c]?.let { 
-            return Result(c, it.prov, it.lat, it.lon)
+            return Result(c, it.prov, it.reg, it.lat, it.lon)
         }
 
         // 2. Priorità: Località (cerca se il testo della località contiene un nome di comune)
         for ((nome, info) in databaseCompleto) {
             if (nome.length > 3 && l.contains(nome)) {
-                return Result(nome, info.prov, info.lat, info.lon)
+                return Result(nome, info.prov, info.reg, info.lat, info.lon)
             }
         }
 
@@ -74,11 +76,11 @@ object ComuniDatabase {
         if (p.length == 2) {
             val capoluogo = getCapoluogo(p)
             databaseCompleto[capoluogo]?.let {
-                return Result(capoluogo, p, it.lat, it.lon)
+                return Result(capoluogo, p, it.reg, it.lat, it.lon)
             }
         }
 
-        return Result("vicenza", "VI", 45.5479, 11.5446)
+        return Result("vicenza", "VI", "Veneto", 45.5479, 11.5446)
     }
 
     private fun getCapoluogo(prov: String): String {

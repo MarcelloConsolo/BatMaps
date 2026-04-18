@@ -32,6 +32,23 @@
         .valore { color: #2c3e50; font-weight: 500; }
         .specie-title { color: #2980b9; font-size: 1.2em; font-weight: bold; display: block; }
         .date-subtitle { font-size: 0.85em; color: #95a5a6; font-style: italic; margin-bottom: 8px; }
+
+        /* Stili Legenda */
+        .legend-container {
+            position: fixed; bottom: 30px; left: 15px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+            z-index: 1000;
+        }
+        .legend-title { font-weight: bold; font-size: 0.9em; margin-bottom: 6px; color: #2c3e50; display: block; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 4px; font-size: 0.85em; color: #34495e; }
+        .dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 10px; }
+        .dot.green { background-color: #27ae60; }
+        .dot.red { background-color: #c0392b; }
+        .dot.yellow { background-color: #f7ff65; border: 1px solid #ccc; }
+        .dot.blue { background-color: #2980b9; }
     </style>
 </head>
 
@@ -41,7 +58,14 @@
     <b style="font-size:1.2em; color: #2c3e50;">BatMaps 2025</b><br>
     <div id="status" style="color: #7f8c8d; font-size: 0.9em; margin: 5px 0;">Sincronizzazione Excel...</div>
     <div id="counter" style="font-size: 1.2em; font-weight: bold; color: #27ae60;"></div>
+</div>
 
+<div class="legend-container">
+    <span class="legend-title">Legenda</span>
+    <div class="legend-item"><span class="dot green"></span> Liberato / Recuperato dalla madre</div>
+    <div class="legend-item"><span class="dot red"></span> Morto</div>
+    <div class="legend-item"><span class="dot yellow"></span> In degenza</div>
+    <div class="legend-item"><span class="dot blue"></span> Altro</div>
 </div>
 
 <div id="map"></div>

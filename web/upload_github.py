@@ -17,18 +17,32 @@ def upload_to_github():
     git_path = find_git()
     print(f"--- USANDO GIT DA: {git_path} ---")
 
-    try:
-        # Aggiunge tutto
-        subprocess.run([git_path, "add", "."], check=True)
-        # Commit
-        subprocess.run([git_path, "commit", "-m", "Riparazione province e Bassano"], check=True)
-        # Push
-        subprocess.run([git_path, "push"], check=True)
+    # Ci spostiamo nella root del progetto (una cartella sopra 'web')
+    # così il comando 'git add .' prende tutto, incluso index.html
+    os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    print(f"--- LAVORO NELLA DIRECTORY: {os.getcwd()} ---")
 
-        print("✅ UPLOAD COMPLETATO CON SUCCESSO!")
+    try:
+        # Sincronizza prima di caricare per evitare errori di "rejected"
+        print("Sincronizzazione (pull)...")
+        subprocess.run([git_path, "pull", "origin", "main", "--rebase"], check=False)
+
+        # Aggiunge tutto
+        print("Aggiunta file...")
+        subprocess.run([git_path, "add", "."], check=True)
+
+        # Commit
+        print("Commit...")
+        subprocess.run([git_path, "commit", "-m", "Aggiornamento automatico BatMaps"], check=False)
+
+        # Push esplicito su origin main
+        print("Caricamento (push)...")
+        subprocess.run([git_path, "push", "origin", "main"], check=True)
+
+        print("\n✅ UPLOAD COMPLETATO CON SUCCESSO!")
 
     except Exception as e:
-        print(f"❌ ERRORE: {e}")
+        print(f"\n❌ ERRORE: {e}")
 
 if __name__ == "__main__":
     upload_to_github()

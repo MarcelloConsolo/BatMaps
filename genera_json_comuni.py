@@ -39,15 +39,26 @@ def genera():
         'galzignano terme': (45.3087, 11.7323)
     }
 
-    input_path = 'comuni_db_extracted/FREE/italy_cities.json'
+    input_cities = 'comuni_db_extracted/FREE/italy_cities.json'
+    input_provs = 'comuni_db_extracted/FREE/italy_provincies.json'
+    input_regions = 'comuni_db_extracted/FREE/italy_regions.json'
+
     output_path_app = 'app/src/main/assets/comuni_italiani.json'
     output_path_web = 'web/comuni_italiani.json'
 
-    if not os.path.exists(input_path):
-        print(f"Errore: {input_path} non trovato")
+    if not all(os.path.exists(p) for p in [input_cities, input_provs, input_regions]):
+        print(f"Errore: file input non trovati")
         return
 
-    with open(input_path, encoding='utf-8') as f:
+    with open(input_regions, encoding='utf-8') as f:
+        regions_list = json.load(f)['Foglio1']
+        regions_map = {r['id_regione']: r['regione'] for r in regions_list}
+
+    with open(input_provs, encoding='utf-8') as f:
+        provs_list = json.load(f)['Foglio1']
+        provs_map = {p['sigla']: regions_map.get(p['id_regione'], "Sconosciuta") for p in provs_list}
+
+    with open(input_cities, encoding='utf-8') as f:
         cities = json.load(f)['Foglio1']
 
     data = {}
@@ -56,24 +67,29 @@ def genera():
         prov = str(c['provincia']).upper().strip()
         coords = coords_base.get(nome) or coords_base.get(prov) or (45.5479, 11.5446)
 
+        regione = provs_map.get(prov, "Sconosciuta")
+
         data[nome] = {
             'prov': prov,
+            'reg': regione,
             'res': c.get('num_residenti', 0),
             'sup': c.get('superficie', 0),
             'lat': float(coords[0]),
             'lon': float(coords[1])
         }
 
-    # Assicuriamoci che Boara Pisana sia nel database (alcuni database lo chiamano Boara)
+    # Custom override per Boara Pisana
     if 'boara pisana' not in data:
-        data['boara pisana'] = {'prov': 'PD', 'res': 2500, 'sup': 16.0, 'lat': 45.1118, 'lon': 11.7831}
+        data['boara pisana'] = {'prov': 'PD', 'reg': 'Veneto', 'res': 2500, 'sup': 16.0, 'lat': 45.1118, 'lon': 11.7831}
+    else:
+        data['boara pisana']['reg'] = 'Veneto'
 
     for out in [output_path_app, output_path_web]:
         os.makedirs(os.path.dirname(out), exist_ok=True)
         with open(out, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
-    print(f"✅ Database aggiornato: Boara Pisana certificato.")
+    print(f"✅ Database aggiornato con Regioni e Boara Pisana certificato.")
 
 if __name__ == "__main__":
     genera()

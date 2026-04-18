@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,6 +36,7 @@ data class Segnalazione(
     val localita: String,
     val comune: String,
     val provincia: String,
+    val regione: String,
     val stato: String,
     val note: String,
     var latitude: Double,
@@ -68,14 +70,49 @@ fun BatMapScreen() {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             } else {
                 OSMMapView(segnalazioni)
+                // Box per il Totale
                 Box(
                     modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
                         .background(Color.White.copy(alpha = 0.8f), MaterialTheme.shapes.medium).padding(8.dp)
                 ) {
                     Text("Totale: ${segnalazioni.size}", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                 }
+
+                // Box per la Legenda
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(16.dp)
+                        .background(Color.White.copy(alpha = 0.8f), MaterialTheme.shapes.medium)
+                        .padding(8.dp)
+                ) {
+                    Column {
+                        Text("Legenda", style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LegendItem(Color(39, 174, 96), "Liberato / Recuperato")
+                        LegendItem(Color(192, 57, 43), "Morto")
+                        LegendItem(Color(247, 255, 101), "In degenza")
+                        LegendItem(Color(41, 128, 185), "Altro")
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+fun LegendItem(color: Color, text: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(vertical = 2.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .background(color, shape = CircleShape)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = text, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -124,7 +161,7 @@ fun OSMMapView(punti: List<Pair<Segnalazione, GeoPoint>>) {
             marker.snippet = "${info.data}\n\n" +
                              "Loc: ${info.localita}\n" +
                              "Com: ${info.comune}\n" +
-                             "Prov: ${info.provincia}\n" +
+                             "Prov: ${info.provincia} (${info.regione})\n" +
                              "Stato: ${info.stato}\n" +
                              "Condizioni: ${info.note}"
             mapView.overlays.add(marker)
@@ -200,6 +237,11 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
                 val hours = totalSeconds / 3600
                 val minutes = (totalSeconds % 3600) / 60
                 oRaw = String.format(Locale.US, "%02d:%02d", hours, minutes)
+            } else if (oRaw.contains(":")) {
+                val parti = oRaw.split(":")
+                if (parti.size >= 2) {
+                    oRaw = "${parti[0].padStart(2, '0')}:${parti[1].padStart(2, '0')}"
+                }
             }
             
             val dataFull = if (oRaw.isNotBlank() && oRaw != "-") "Segnalazione del $dRaw alle ore $oRaw" else "Segnalazione del $dRaw"
@@ -222,8 +264,12 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
             // PULIZIA VISIVA: Rimuoviamo il nome del comune dalla stringa della località per il display
             var localitaDisplay = localitaRaw
             if (comuneDisplay.isNotBlank()) {
-                localitaDisplay = localitaDisplay.replace(comuneDisplay, "", ignoreCase = true)
-                    .replace(",", "")
+                // Regex avanzata per rimuovere il nome del comune come parola intera
+                val escapedComune = Regex.escape(comuneDisplay)
+                val regex = Regex("\\b$escapedComune\\b", RegexOption.IGNORE_CASE)
+                localitaDisplay = localitaDisplay.replace(regex, "")
+                    .replace(Regex("[\\s,]+$"), "") 
+                    .replace(Regex("^[\\s,]+"), "")
                     .trim()
                     .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
             }
@@ -241,7 +287,7 @@ fun leggiExcel(context: Context): List<Pair<Segnalazione, GeoPoint>> {
             val stato = formatter.formatCellValue(row.getCell(colMap["stato"] ?: -1)).ifBlank { "-" }
             val note = formatter.formatCellValue(row.getCell(colMap["note"] ?: -1)).ifBlank { "-" }
 
-            lista.add(Segnalazione(dataFull, specie.ifBlank { "Pipistrello" }, localitaDisplay, comuneDisplay, res.prov, stato, note, lat, lon) to GeoPoint(lat, lon))
+            lista.add(Segnalazione(dataFull, specie.ifBlank { "Pipistrello" }, localitaDisplay, comuneDisplay, res.prov, res.reg, stato, note, lat, lon) to GeoPoint(lat, lon))
         }
         workbook.close()
     } catch (e: Exception) { Log.e("BatMaps", "Errore: ${e.message}") }

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <title>BatMaps 2025 - Versione 17.65</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+    <style>
+        body { margin:0; padding:0; font-family:sans-serif; background:#f4f7f6; }
+        #map { height:100vh; width:100%; }
+        #overlay {
+            position:fixed; top:15px; right:15px;
+            background:white; padding:15px;
+            border-radius:10px;
+            box-shadow:0 4px 15px rgba(0,0,0,0.2);
+            z-index:1000;
+            border-left:5px solid #2980b9;
+            width:230px;
+        }
+        .popup-table { font-size:13px; border-collapse:collapse; width:100%; margin-top:5px; }
+        .popup-table td { padding:5px 0; border-bottom:1px solid #eee; vertical-align:top; }
+        .label { font-weight:bold; color:#7f8c8d; width:90px; }
+        .valore { color:#2c3e50; font-weight:500; }
+        .specie-title { color:#2980b9; font-size:1.2em; font-weight:bold; display:block; }
+        .date-subtitle { font-size:0.85em; color:#95a5a6; font-style:italic; margin-bottom:8px; }
+    </style>
+</head>
+
+<body>
+
+<div id="overlay">
+    <b style="font-size:1.2em;color:#2c3e50;">BatMaps 2025</b><br>
+    <div id="status" style="color:#7f8c8d;font-size:0.9em;margin:5px 0;">Sincronizzazione Excel...</div>
+    <div id="counter" style="font-size:1.2em;font-weight:bold;color:#27ae60;"></div>
+</div>
+
+<div id="map"></div>
+
+<script>
+const map = L.map('map').setView([45.4, 11.8], 8);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+/* =========================
+   NORMALIZZAZIONE FORTE
+   (FIX BASSANO + simili)
+========================= */
+const normalizeKey = (str) =>
+    String(str || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+function formatTime(val) {
+    if (!val || val === "-") return "";
+    let s = String(val).trim();
+    let num = parseFloat(s.replace(",", "."));
+
+    if (!isNaN(num) && num > 0 && num < 1) {
+        let sec = Math.round(num * 24 * 3600);
+        let h = Math.floor(sec / 3600);
+        let m = Math.floor((sec % 3600) / 60);
+        return (h<10?"0":"")+h+":"+(m<10?"0":"")+m;
+    }
+
+    if (s.includes(":")) {
+        let p = s.split(":");
+        return p[0].padStart(2,'0') + ":" + p[1].padStart(2,'0');
+    }
+
+    return s;
+}
+
+async function init() {
+    try {
+        let dbComuni = {};
+        try {
+            dbComuni = await (await fetch('web/comuni_italiani.json')).json();
+        } catch {
+            dbComuni = await (await fetch('comuni_italiani.json')).json();
+        }
+
+        let response;
+        try {
+            response = await fetch('web/Pipistrelli 2025.xlsx?v=' + Date.now());
+        } catch {
+            response = await fetch('Pipistrelli 2025.xlsx?v=' + Date.now());
+        }
+
+        const data = new Uint8Array(await response.arrayBuffer());
+        const workbook = XLSX.read(data, {type:'array'});
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, {header:1});
+
+        let hIdx = 0;
+        for (let i=0;i<rows.length&&i<20;i++) {
+            if (rows[i]?.some(c =>
+                String(c||"").toLowerCase().includes("speci") ||
+                String(c||"").toLowerCase().includes("data")
+            )) {
+                hIdx = i;
+                break;
+            }
+        }
+
+        const header = rows[hIdx].map(h => String(h||"").toLowerCase().trim());
+        const dataRows = rows.slice(hIdx+1);
+
+        const getCol = (targets) => {
+            targets = targets.map(t => t.toLowerCase());
+            for (let i=0;i<header.length;i++) {
+                for (let t of targets) {
+                    if (header[i]?.includes(t)) return i;
+                }
+            }
+            return -1;
+        };
+
+        const c = {
+            specie: getCol(["specie animale"]),
+            data: getCol(["data segnalazione"]),
+            ora: getCol(["ora"]),
+            loc: getCol(["localita"]),
+            com: getCol(["comune"]),
+            prov: getCol(["provincia"]),
+            stato: getCol(["stato"]),
+            note: getCol(["condizioni al recupero"]),
+            lat: getCol(["latitudine"]),
+            lon: getCol(["longitudine"])
+        };
+
+        const markers = L.markerClusterGroup();
+        let allMarkers = [];
+
+        dataRows.forEach(row => {
+            if (!row || row.length < 2) return;
+
+            const vSpecie = String(row[c.specie] || "Pipistrello").trim();
+            const vComRaw = String(row[c.com] || "").trim();
+            const vLocRaw = String(row[c.loc] || "").trim();
+            const vProv = String(row[c.prov] || "").trim().toUpperCase();
+            const vOra = formatTime(row[c.ora]);
+
+            let vData = "-";
+            if (row[c.data]) {
+                if (typeof row[c.data] === "number") {
+                    vData = new Date((row[c.data]-25569)*86400*1000).toLocaleDateString("it-IT");
+                } else {
+                    vData = String(row[c.data]).split("T")[0];
+                }
+            }
+
+            let lat = parseFloat(String(row[c.lat]||"").replace(",","."));
+            let lon = parseFloat(String(row[c.lon]||"").replace(",","."));
+
+            /* =========================
+               FIX BASSANO + COMUNI
+            ========================= */
+            if (isNaN(lat) || isNaN(lon)) {
+                const key = normalizeKey(vComRaw);
+                const match = dbComuni[key];
+
+                if (match) {
+                    lat = match.lat;
+                    lon = match.lon;
+                } else {
+                    return; // non inventare coordinate
+                }
+            }
+
+            const safeLoc =
+                (vLocRaw && vLocRaw.trim() !== "")
+                    ? vLocRaw
+                    : vComRaw;
+
+            const marker = L.marker([lat, lon]).bindPopup(`
+                <div style="min-width:210px">
+                    <span class="specie-title">${vSpecie}</span>
+                    <div class="date-subtitle">Segnalazione del ${vData} ${vOra ? "ore "+vOra : ""}</div>
+                    <table class="popup-table">
+                        <tr><td class="label">Località:</td><td class="valore">${safeLoc}</td></tr>
+                        <tr><td class="label">Comune:</td><td class="valore">${vComRaw||""}</td></tr>
+                        <tr><td class="label">Provincia:</td><td class="valore">${vProv||""}</td></tr>
+                        <tr><td class="label">Stato:</td><td class="valore">${String(row[c.stato]||"")}</td></tr>
+                        <tr><td class="label">Condizioni:</td><td class="valore">${String(row[c.note]||"")}</td></tr>
+                    </table>
+                </div>
+            `);
+
+            allMarkers.push({marker, lat, lon});
+            markers.addLayer(marker);
+        });
+
+        map.addLayer(markers);
+
+        if (allMarkers.length) {
+            map.fitBounds(allMarkers.map(m => [m.lat, m.lon]));
+        }
+
+        document.getElementById("status").innerText = "✅ Sincronizzato";
+        document.getElementById("counter").innerText = "Totale: " + allMarkers.length;
+
+    } catch (e) {
+        console.error(e);
+        document.getElementById("status").innerText = "❌ Errore";
+    }
+}
+
+init();
+</script>
+
+</body>
+</html>

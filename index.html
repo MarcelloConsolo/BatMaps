@@ -151,6 +151,23 @@ async function init() {
         const markers = L.markerClusterGroup();
         let allMarkers = [];
 
+        const sortedComuniKeys = Object.keys(dbComuni).sort((a, b) => b.length - a.length);
+
+        function determinaDati(vComRaw, vLocRaw) {
+            let vComLow = String(vComRaw || "").toLowerCase().trim();
+            if (vComLow && dbComuni[vComLow]) {
+                return { nome: vComLow, ...dbComuni[vComLow] };
+            }
+
+            let vLocLow = String(vLocRaw || "").toLowerCase().trim().replace(/\u00A0/g, ' ');
+            for (let nome of sortedComuniKeys) {
+                if (nome.length > 3 && vLocLow.includes(nome)) {
+                    return { nome: nome, ...dbComuni[nome] };
+                }
+            }
+            return { nome: "vicenza", prov: "VI", reg: "Veneto", lat: 45.5479, lon: 11.5446 };
+        }
+
         dataRows.forEach(row => {
             if (!row || row.length < 2) return;
 
@@ -162,18 +179,12 @@ async function init() {
             let vProvOrig = String(row[c.prov] || "").trim().toUpperCase();
             let vOra = formatTime(row[c.ora]);
 
-            function determinaDati() {
-                let vComLow = vComRaw.toLowerCase();
-                if (vComLow && dbComuni[vComLow]) return dbComuni[vComLow];
-                return { nome: "Vicenza", prov: "VI", reg: "Veneto", lat: 45.5479, lon: 11.5446 };
-            }
-
-            const res = determinaDati();
+            const res = determinaDati(vComRaw, vLocRaw);
             let vProv = (vProvOrig && vProvOrig !== "-") ? vProvOrig : res.prov;
 
             // --- ESTRAZIONE E SPOSTAMENTO COMUNE ---
             let vComDisp = (vComRaw && vComRaw !== "-") ? vComRaw :
-                           (res.nome ? res.nome.charAt(0).toUpperCase() + res.nome.slice(1) : "-");
+                           (res.nome ? res.nome.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ") : "-");
 
             let vLocDisp = vLocRaw.replace(/\u00A0/g, ' ');
 

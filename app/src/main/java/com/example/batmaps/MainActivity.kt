@@ -107,26 +107,58 @@ fun BatMapScreen() {
             // 1. LA MAPPA
             OSMMapView(tutteLeSegnalazioni.toList())
 
-            // 2. FINESTRA VERSIONE (Ripristinata come originale)
+            // 2. FINESTRA STATISTICHE (Top Right - come da immagine)
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(16.dp),
-                color = Color.White, // Bianco solido
-                shape = MaterialTheme.shapes.medium,
-                shadowElevation = 8.dp,
-                border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFF2c3e50))
+                color = Color.White,
+                shape = MaterialTheme.shapes.small,
+                shadowElevation = 4.dp,
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray)
             ) {
-                Text(
-                    text = "BatMaps 2025 - v18.40",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color(0xFF2c3e50),
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold
-                )
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "BatMaps 2025",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(modifier = Modifier.size(10.dp), color = Color(0xFF2ecc71), shape = MaterialTheme.shapes.extraSmall) {}
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "Sincronizzato", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                    Text(
+                        text = "Totale: ${tutteLeSegnalazioni.size}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF27ae60),
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    )
+                }
             }
 
-            // 3. STATO CARICAMENTO
+            // 3. LEGENDA (Bottom Left - come da immagine)
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp)
+                    .padding(bottom = 32.dp),
+                color = Color.White,
+                shape = MaterialTheme.shapes.small,
+                shadowElevation = 4.dp,
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray)
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text("Legenda", style = MaterialTheme.typography.labelLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LegendItem(Color(0xFF2ecc71), "Liberato / Recuperato da madre")
+                    LegendItem(Color.Red, "Morto")
+                    LegendItem(Color.Yellow, "In degenza")
+                    LegendItem(Color.Blue, "Altro")
+                }
+            }
+
+            // 4. STATO CARICAMENTO
             if (isLoading) {
                 Surface(
                     modifier = Modifier
@@ -172,12 +204,21 @@ fun OSMMapView(punti: List<Pair<Segnalazione, GeoPoint>>) {
                 else -> android.graphics.Color.BLUE
             }
             marker.icon.mutate().setTint(color)
-            marker.snippet = "STATO: ${info.stato.uppercase()}\nDATA: ${info.data}\nLOCALITÀ: ${info.localita}\nCOMUNE: ${info.comune} (${info.prov})\nNOTE: ${info.note}"
+            marker.snippet = "Località: ${info.localita}\nComune: ${info.comune}\nProvincia: ${info.prov}\nStato: ${info.stato}\nCondizioni: ${info.note}"
             mapView.overlays.add(marker)
         }
         mapView.invalidate()
     }
     AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+}
+
+@Composable
+fun LegendItem(color: Color, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+        Surface(modifier = Modifier.size(8.dp), color = color, shape = androidx.compose.foundation.shape.CircleShape) {}
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 suspend fun leggiExcelIncrementale(
@@ -257,7 +298,7 @@ suspend fun leggiExcelIncrementale(
                     if (locRaw.isNotBlank()) queryParts.add(locRaw)
                     queryParts.add(comRaw)
                     if (provRaw.isNotBlank()) queryParts.add(provRaw)
-                    queryParts.add("Veneto, Italia")
+                    queryParts.add("Italia")
                     val query = queryParts.joinToString(", ")
 
                     val nominatimCoords = getCoordinatesFromNominatim(query)

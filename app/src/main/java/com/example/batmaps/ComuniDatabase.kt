@@ -63,9 +63,11 @@ object ComuniDatabase {
         val l = localita.lowercase().trim().replace('\u00A0', ' ')
 
         // Normalizzazione manuale per errori comuni
-        if (c == "due ville") c = "dueville"
-        if (c == "montecchio" || c == "montecchio vicenza") {
-            c = if (p == "VI" || l.contains("vicenza")) "montecchio maggiore" else "montecchio"
+        if (c == "due ville" || c == "dueville") c = "dueville"
+        if (c == "camisano" || c == "camisano vicentino") c = "camisano vicentino"
+        if (c == "grisignao" || c == "grisignano" || c == "grisignano di zocco") c = "grisignano di zocco"
+        if (c == "montecchio" || c == "montecchio vicenza" || c == "montecchio maggiore") {
+            c = "montecchio maggiore"
         }
 
         // 1. Priorità: Comune esatto nel DB

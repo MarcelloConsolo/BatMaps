@@ -3,80 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Aggiornamento v18.40 - Build 20250212_1700 -->
-    <title>BatMaps 2025 - v18.40</title>
+    <title>BatMaps 2025</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Arial Black', sans-serif; overflow: hidden; }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
         #map { height: 100vh; width: 100%; z-index: 1; }
 
-        /* FINESTRA v18.40 - STILE FORZATO */
-        .version-tag {
-            position: fixed; top: 20px; right: 20px;
-            background: #FFFFFF !important; color: #2c3e50 !important;
-            padding: 12px 20px; border-radius: 4px; font-weight: 900;
-            z-index: 9999; box-shadow: 8px 8px 0px #2c3e50;
-            border: 4px solid #2c3e50; font-size: 18px;
-            text-transform: uppercase;
+        /* FINESTRA STATISTICHE (Top Right - come immagine) */
+        .stats-box {
+            position: fixed; top: 15px; right: 15px;
+            background: white; padding: 12px 18px; border-radius: 5px;
+            z-index: 1100; border: 1px solid #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
+        .stats-title { font-weight: bold; font-size: 15px; color: #333; margin-bottom: 2px; }
+        .sync-status { display: flex; align-items: center; font-size: 12px; color: #666; }
+        .dot { width: 8px; height: 8px; background: #2ecc71; border-radius: 50%; margin-right: 6px; }
+        .total-count { font-weight: bold; font-size: 14px; color: #27ae60; margin-top: 4px; }
 
-        .status-overlay {
-            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
-            background: #2c3e50; color: white; padding: 15px 30px;
-            border-radius: 5px; z-index: 2000; display: flex; align-items: center;
-            font-size: 14px; border: 2px solid white;
+        /* LEGENDA (Bottom Left - come immagine) */
+        .legenda {
+            position: fixed; bottom: 30px; left: 15px;
+            background: white; padding: 12px; border-radius: 5px;
+            z-index: 1100; border: 1px solid #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            font-size: 11px; line-height: 1.6;
         }
-        .spinner {
-            border: 4px solid rgba(255,255,255,0.3); border-top: 4px solid #e67e22;
-            border-radius: 50%; width: 20px; height: 20px;
-            animation: spin 1s linear infinite; margin-right: 15px;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .legenda-title { font-weight: bold; font-size: 12px; margin-bottom: 6px; }
+        .legenda-item { display: flex; align-items: center; margin-bottom: 3px; }
+        .legenda-color { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
 
-        .popup-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-family: sans-serif; }
-        .popup-table td { padding: 6px; border: 1px solid #eee; font-size: 13px; }
-        .label { font-weight: bold; color: #2c3e50; background: #f9f9f9; width: 80px; }
-        .stato-header { font-weight: 900; text-transform: uppercase; font-size: 12px; margin-bottom: 5px; display: block; padding: 4px; border-radius: 3px; color: white; text-align: center; }
+        /* POPUP (Come immagine) */
+        .popup-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+        .popup-table td { padding: 4px 0; border-bottom: 1px solid #f2f2f2; vertical-align: top; }
+        .label { color: #888; width: 85px; }
+        .val { color: #333; font-weight: 500; }
     </style>
 </head>
 <body>
 
-<div class="version-tag">BatMaps v18.40</div>
+<div class="stats-box">
+    <div class="stats-title">BatMaps 2025</div>
+    <div class="sync-status"><span class="dot"></span> Sincronizzato</div>
+    <div class="total-count" id="total-val">Totale: 0</div>
+</div>
 
-<div id="status" class="status-overlay">
-    <div class="spinner"></div>
-    <span id="status-msg">AVVIO SISTEMA 2022-2025...</span>
+<div class="legenda">
+    <div class="legenda-title">Legenda</div>
+    <div class="legenda-item"><span class="legenda-color" style="background:#2ecc71"></span> Liberato / Recuperato dalla madre</div>
+    <div class="legenda-item"><span class="legenda-color" style="background:red"></span> Morto</div>
+    <div class="legenda-item"><span class="legenda-color" style="background:yellow"></span> In degenza</div>
+    <div class="legenda-item"><span class="legenda-color" style="background:blue"></span> Altro</div>
 </div>
 
 <div id="map"></div>
 
 <script>
-    const map = L.map('map').setView([45.45, 12.0], 9);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'BatMaps 2025' }).addTo(map);
+    const map = L.map('map').setView([45.45, 11.5], 7);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'BatMaps' }).addTo(map);
 
-    const localDB = {
-        "mirano": {lat: 45.4925, lon: 12.1128},
-        "mogliano veneto": {lat: 45.5604, lon: 12.2373},
-        "venezia": {lat: 45.4408, lon: 12.3155},
-        "mestre": {lat: 45.4908, lon: 12.2389},
-        "padova": {lat: 45.4064, lon: 11.8768}
-    };
+    let totalPoints = 0;
+    const localDB = { "mirano": {lat: 45.4925, lon: 12.1128}, "mogliano veneto": {lat: 45.5604, lon: 12.2373} };
 
     async function getCoordinates(loc, com, prov, latF, lonF) {
-        // PRIORITÀ 1: COORDINATE NEL FILE
         if (latF && lonF) {
             const lt = parseFloat(String(latF).replace(',', '.'));
             const ln = parseFloat(String(lonF).replace(',', '.'));
             if (!isNaN(lt) && !isNaN(ln)) return { lat: lt, lon: ln, src: 'file' };
         }
-        // PRIORITÀ 2: DB LOCALE
         const cKey = com.toLowerCase().trim();
         if ((!loc || loc.toLowerCase() === cKey) && localDB[cKey]) return { ...localDB[cKey], src: 'local' };
-        // PRIORITÀ 3: NOMINATIM
         try {
-            const q = `${loc ? loc + ", " : ""}${com}, ${prov || ""}, Veneto, Italia`;
+            const q = `${loc ? loc + ", " : ""}${com}, ${prov || ""}, Italia`;
             const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&email=marcello.consolo@gmail.com`);
             const data = await resp.json();
             if (data && data.length > 0) return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), src: 'web' };
@@ -85,7 +83,6 @@
     }
 
     async function processYear(year) {
-        const msg = document.getElementById("status-msg");
         try {
             const url = `https://raw.githubusercontent.com/marcelloconsolo/BatMaps/main/app/src/main/assets/Pipistrelli ${year}.xlsx?v=${Date.now()}`;
             const resp = await fetch(url);
@@ -106,7 +103,7 @@
                 cm: h.findIndex(x => x.includes("comune")),
                 pr: h.findIndex(x => x.includes("provin") || x.includes("prov.")),
                 st: h.findIndex(x => x.includes("stato") || x.includes("condizioni")),
-                nt: h.findIndex(x => x.includes("note")),
+                nt: h.findIndex(x => x.includes("note") || x.includes("condizioni")),
                 la: h.findIndex(x => x.includes("lat")),
                 lo: h.findIndex(x => x.includes("lon") || x.includes("lng"))
             };
@@ -118,15 +115,15 @@
                 const loc = String(r[m.lc] || "").trim();
                 if (!com && !loc) continue;
 
-                msg.innerText = `CARICAMENTO ${year}: ${com || loc}`;
                 const res = await getCoordinates(loc, com, r[m.pr], r[m.la], r[m.lo]);
-
                 if (res) {
+                    totalPoints++;
+                    document.getElementById("total-val").innerText = `Totale: ${totalPoints}`;
                     const st = String(r[m.st] || "").toLowerCase();
-                    let col = "blue", hx = "#3498db";
-                    if (st.includes("liberato")) { col="green"; hx="#27ae60"; }
-                    else if (st.includes("morto")) { col="red"; hx="#e74c3c"; }
-                    else if (st.includes("degenza")) { col="yellow"; hx="#f1c40f"; }
+                    let col = "blue";
+                    if (st.includes("liberato")) col="green";
+                    else if (st.includes("morto")) col="red";
+                    else if (st.includes("degenza")) col="yellow";
 
                     const icon = new L.Icon({
                         iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${col}.png`,
@@ -135,14 +132,15 @@
                     });
 
                     const pop = `
-                        <div style="min-width:220px">
-                            <span class="stato-header" style="background:${hx}">${r[m.st] || "SEGNALAZIONE"}</span>
-                            <center><b>${r[m.sp] || "Pipistrello"} (${year})</b></center>
+                        <div style="min-width:230px">
+                            <b style="font-size:14px">${r[m.sp] || "Pipistrello"}</b>
+                            <div style="font-size:11px; color:#999; margin-bottom:5px">Segnalazione del ${r[m.dt] || "-"}</div>
                             <table class="popup-table">
-                                <tr><td class="label">DATA</td><td>${r[m.dt] || "-"}</td></tr>
-                                <tr><td class="label">LOCALITÀ</td><td>${loc || "-"}</td></tr>
-                                <tr><td class="label">COMUNE</td><td>${com} (${r[m.pr] || ""})</td></tr>
-                                <tr><td class="label">NOTE</td><td>${r[m.nt] || "-"}</td></tr>
+                                <tr><td class="label">Località:</td><td class="val">${loc || "-"}</td></tr>
+                                <tr><td class="label">Comune:</td><td class="val">${com}</td></tr>
+                                <tr><td class="label">Provincia:</td><td class="val">${r[m.pr] || "-"}</td></tr>
+                                <tr><td class="label">Stato:</td><td class="val">${r[m.st] || "-"}</td></tr>
+                                <tr><td class="label">Condizioni:</td><td class="val">${r[m.nt] || "-"}</td></tr>
                             </table>
                         </div>
                     `;
@@ -155,7 +153,6 @@
 
     async function init() {
         for (const y of [2022, 2023, 2024, 2025]) await processYear(y);
-        document.getElementById("status").style.display = "none";
     }
     init();
 </script>

@@ -75,7 +75,7 @@
         if ((!loc || loc.toLowerCase() === cKey) && localDB[cKey]) return { ...localDB[cKey], src: 'local' };
         try {
             const q = `${loc ? loc + ", " : ""}${com}, ${prov || ""}, Italia`;
-            const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&email=marcello.consolo@gmail.com`);
+            const resp = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=it&email=marcello.consolo@gmail.com`);
             const data = await resp.json();
             if (data && data.length > 0) return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), src: 'web' };
             return localDB[cKey] ? { ...localDB[cKey], src: 'local' } : null;
@@ -99,10 +99,10 @@
             const m = {
                 sp: h.findIndex(x => x.includes("specie")),
                 dt: h.findIndex(x => x.includes("data")),
-                lc: h.findIndex(x => x.includes("localit") || x.includes("indirizzo")),
-                cm: h.findIndex(x => x.includes("comune")),
-                pr: h.findIndex(x => x.includes("provin") || x.includes("prov.")),
-                st: h.findIndex(x => x.includes("stato") || x.includes("condizioni")),
+                lc: h.findIndex(x => x.includes("localit") || x.includes("indirizzo") || x.includes("via")),
+                cm: h.findIndex(x => x.includes("comune") || x.includes("citt")),
+                pr: h.findIndex(x => x.includes("prov") || x === "pr"),
+                st: h.findIndex(x => x === "stato" || (x.includes("stato") && !x.includes("condizioni"))),
                 nt: h.findIndex(x => x.includes("note") || x.includes("condizioni")),
                 la: h.findIndex(x => x.includes("lat")),
                 lo: h.findIndex(x => x.includes("lon") || x.includes("lng"))

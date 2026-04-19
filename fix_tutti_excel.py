@@ -1,7 +1,11 @@
 import json
 import os
 import shutil
+import math
 from openpyxl import load_workbook
+
+def get_distance(lat1, lon1, lat2, lon2):
+    return math.sqrt((lat1 - lat2)**2 + (lon1 - lon2)**2)
 
 def fix_excel_files():
     years = [2022, 2023, 2024, 2025]
@@ -11,21 +15,29 @@ def fix_excel_files():
         print(f"Errore: {json_path} non trovato.")
         return
 
-    # Carica database comuni
     with open(json_path, encoding='utf-8') as f:
         db_comuni = json.load(f)
 
+    # Dizionario di correzione manuale per casi ambigui o errori comuni
+    CORREZIONI_NOMI = {
+        "due ville": "dueville",
+        "dueville": "dueville",
+        "montecchio": "montecchio maggiore", # Default se non specificato
+        "montecchio vicenza": "montecchio maggiore",
+        "montecchio maggiore": "montecchio maggiore",
+        "montecchio precalcino": "montecchio precalcino",
+        "altavilla": "altavilla vicentina",
+        "quinto": "quinto vicentino",
+    }
+
     for year in years:
         file_name = f'Pipistrelli {year}.xlsx'
-        if not os.path.exists(file_name):
-            print(f"Salto {file_name}: non trovato.")
-            continue
+        if not os.path.exists(file_name): continue
 
-        print(f"--- Elaborazione {file_name} ---")
+        print(f"\n--- Correzione Geografica v2 (Rigorosa) {file_name} ---")
         wb = load_workbook(file_name)
         ws = wb.active
 
-        # Trova intestazioni
         header_row = 1
         col_map = {}
         for r in range(1, 10):
@@ -42,44 +54,57 @@ def fix_excel_files():
                     if 'lon' in val or 'lng' in val: col_map['lon'] = c
                 break
 
-        if 'comune' not in col_map:
-            print(f"Errore: colonna Comune non trovata in {file_name}")
-            continue
+        if 'comune' not in col_map: continue
 
-        count_prov = 0
-        count_coords = 0
+        count_fixed = 0
         for r in range(header_row + 1, ws.max_row + 1):
-            comune = str(ws.cell(row=r, column=col_map['comune']).value or "").strip().lower()
+            comune_raw = str(ws.cell(row=r, column=col_map['comune']).value or "").strip().lower()
+            prov_raw = str(ws.cell(row=r, column=col_map.get('prov', 1)).value or "").strip().upper()
 
-            if comune in db_comuni:
-                info = db_comuni[comune]
+            # 1. Normalizzazione Nome Comune
+            comune_clean = comune_raw.replace("  ", " ")
+            if comune_clean in CORREZIONI_NOMI:
+                comune_target = CORREZIONI_NOMI[comune_clean]
+            elif comune_clean.replace(" ", "") in db_comuni:
+                comune_target = comune_clean.replace(" ", "")
+            else:
+                comune_target = comune_clean
 
-                # FORZA la provincia corretta se quella attuale è mancante o errata
+            # 2. Match con Database
+            best_info = None
+            if comune_target in db_comuni:
+                best_info = db_comuni[comune_target]
+
+            if best_info:
+                # Forza il nome corretto nell'Excel
+                ws.cell(row=r, column=col_map['comune']).value = comune_target.capitalize()
+                # Forza la provincia corretta
                 if 'prov' in col_map:
-                    curr_prov = str(ws.cell(row=r, column=col_map['prov']).value or "").strip().upper()
-                    if curr_prov != info['prov'].upper():
-                        ws.cell(row=r, column=col_map['prov']).value = info['prov'].upper()
-                        count_prov += 1
+                    ws.cell(row=r, column=col_map['prov']).value = best_info['prov'].upper()
 
-                # VERIFICA COORDINATE: Se mancano o sono palesemente 0, le ripristiniamo dal DB del comune
-                if 'lat' in col_map:
-                    lat_val = ws.cell(row=r, column=col_map['lat']).value
-                    if lat_val is None or lat_val == 0 or str(lat_val).strip() == "":
-                        ws.cell(row=r, column=col_map['lat']).value = info['lat']
-                        count_coords += 1
-                if 'lon' in col_map:
-                    lon_val = ws.cell(row=r, column=col_map['lon']).value
-                    if lon_val is None or lon_val == 0 or str(lon_val).strip() == "":
-                        ws.cell(row=r, column=col_map['lon']).value = info['lon']
-                        count_coords += 1
+                # 3. Verifica Geografica (Soglia 40km per evitare Zagabria o Umbria)
+                lat_val = ws.cell(row=r, column=col_map['lat']).value
+                lon_val = ws.cell(row=r, column=col_map['lon']).value
+
+                try:
+                    curr_lat = float(str(lat_val).replace(',', '.'))
+                    curr_lon = float(str(lon_val).replace(',', '.'))
+                    dist = get_distance(curr_lat, curr_lon, best_info['lat'], best_info['lon'])
+
+                    # Se dist > 0.4 (circa 40-50km) o coordinate assenti/zero
+                    if dist > 0.4 or curr_lat < 35 or curr_lat > 48:
+                        ws.cell(row=r, column=col_map['lat']).value = best_info['lat']
+                        ws.cell(row=r, column=col_map['lon']).value = best_info['lon']
+                        count_fixed += 1
+                except:
+                    ws.cell(row=r, column=col_map['lat']).value = best_info['lat']
+                    ws.cell(row=r, column=col_map['lon']).value = best_info['lon']
+                    count_fixed += 1
 
         wb.save(file_name)
-        # Copia anche in assets e web
         shutil.copy(file_name, f'app/src/main/assets/{file_name}')
-        if os.path.exists('web'):
-            shutil.copy(file_name, f'web/{file_name}')
-
-        print(f"Completato {file_name}: aggiornate {count_prov} province e {count_coords} coordinate.")
+        if os.path.exists('web'): shutil.copy(file_name, f'web/{file_name}')
+        print(f"Completato {file_name}: {count_fixed} correzioni geografiche effettuate.")
 
 if __name__ == "__main__":
     fix_excel_files()

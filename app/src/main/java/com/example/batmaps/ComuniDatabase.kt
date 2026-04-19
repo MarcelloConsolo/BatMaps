@@ -59,8 +59,14 @@ object ComuniDatabase {
 
     fun cercaDati(comune: String, localita: String, provincia: String): Result {
         val p = provincia.uppercase().trim()
-        val c = comune.lowercase().trim().replace('\u00A0', ' ')
+        var c = comune.lowercase().trim().replace('\u00A0', ' ')
         val l = localita.lowercase().trim().replace('\u00A0', ' ')
+
+        // Normalizzazione manuale per errori comuni
+        if (c == "due ville") c = "dueville"
+        if (c == "montecchio" || c == "montecchio vicenza") {
+            c = if (p == "VI" || l.contains("vicenza")) "montecchio maggiore" else "montecchio"
+        }
 
         // 1. Priorità: Comune esatto nel DB
         databaseCompleto[c]?.let {

@@ -61,16 +61,26 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'BatMaps' }).addTo(map);
 
     let totalPoints = 0;
-    // Piccolo database per ricavare la provincia dal comune se manca
+
+    // Database sintetico Comuni -> Provincia per il Web
     const provDB = {
         "mirano": "VE", "mogliano veneto": "TV", "vicenza": "VI", "padova": "PD", "venezia": "VE",
-        "treviso": "TV", "verona": "VR", "belluno": "BL", "rovigo": "RO", "milano": "MI", "bergamo": "BG"
+        "treviso": "TV", "verona": "VR", "belluno": "BL", "rovigo": "RO", "milano": "MI",
+        "mira": "VE", "spinea": "VE", "martellago": "VE", "scorzè": "VE", "salzano": "VE",
+        "noale": "VE", "santa maria di sala": "VE", "pianiga": "VE", "dolo": "VE", "fiesso d'artico": "VE"
     };
 
     function excelDateToJS(serial) {
         if (typeof serial !== 'number') return serial;
         const date = new Date(Math.round((serial - 25569) * 86400 * 1000));
         return date.toLocaleDateString('it-IT');
+    }
+
+    function getProvincia(comune) {
+        const c = String(comune || "").toLowerCase().trim();
+        if (provDB[c]) return provDB[c];
+        // Fallback: se non lo conosco, metto un placeholder o cerco di indovinare dal nome
+        return "";
     }
 
     async function getCoordinates(loc, com, prov, latF, lonF) {
@@ -117,13 +127,14 @@
             for (let i = hIdx + 1; i < rows.length; i++) {
                 const r = rows[i];
                 if (!r || r.length === 0) continue;
+
                 const com = String(r[m.cm] || "").trim();
                 const loc = String(r[m.lc] || "").trim();
                 if (!com && !loc) continue;
 
-                // Ricavo la provincia dal comune se manca
-                let prov = String(r[m.pr] || "").trim();
-                if (!prov && provDB[com.toLowerCase()]) prov = provDB[com.toLowerCase()];
+                // Calcolo Provincia dal Comune
+                let prov = getProvincia(com);
+                if (!prov) prov = String(r[m.pr] || "").trim(); // Fallback all'Excel se il DB non lo ha
 
                 const res = await getCoordinates(loc, com, prov, r[m.la], r[m.lo]);
                 if (res) {
@@ -148,9 +159,9 @@
                             <div class="specie-title">${r[m.sp] || "Pipistrello"}</div>
                             <div style="font-size:11px; color:#999; margin-bottom:5px">Segnalazione del ${dataFormattata || "-"}</div>
                             <table class="popup-table">
+                                <tr><td class="label">Località:</td><td class="val">${loc || "-"}</td></tr>
                                 <tr><td class="label">Provincia:</td><td class="val">${prov || "-"}</td></tr>
                                 <tr><td class="label">Comune:</td><td class="val">${com}</td></tr>
-                                <tr><td class="label">Località:</td><td class="val">${loc || "-"}</td></tr>
                                 <tr><td class="label">Stato:</td><td class="val">${r[m.st] || "-"}</td></tr>
                                 <tr><td class="label">Condizioni:</td><td class="val">${r[m.nt] || "-"}</td></tr>
                             </table>

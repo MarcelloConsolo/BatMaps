@@ -216,11 +216,11 @@ fun OSMMapView(punti: List<Pair<Segnalazione, GeoPoint>>) {
             }
             marker.icon.mutate().setTint(color)
             
-            // Provincia sotto la specie, poi i dettagli
-            marker.snippet = "Provincia: ${info.prov}\n" +
+            // Ordine popup richiesto: Località in cima, poi Provincia
+            marker.snippet = "Località: ${info.localita}\n" +
+                           "Provincia: ${info.prov}\n" +
                            "Data: ${info.data}\n" +
                            "Comune: ${info.comune}\n" +
-                           "Località: ${info.localita}\n" +
                            "Stato: ${info.stato}\n" +
                            "Condizioni: ${info.note}"
             

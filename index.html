@@ -70,7 +70,12 @@
         "noale": "VE", "santa maria di sala": "VE", "pianiga": "VE", "dolo": "VE", "fiesso d'artico": "VE",
         "camponogara": "VE", "fossò": "VE", "vigonovo": "VE", "stra": "VE", "noventa padovana": "PD",
         "vigodarzere": "PD", "cadoneghe": "PD", "limena": "PD", "rubano": "PD", "selvazzano dentro": "PD",
-        "albignasego": "PD", "ponte san nicolò": "PD", "legnaro": "PD", "saonara": "PD"
+        "albignasego": "PD", "ponte san nicolò": "PD", "legnaro": "PD", "saonara": "PD",
+        "conegliano": "TV", "castelfranco veneto": "TV", "montebelluna": "TV", "vittorio veneto": "TV",
+        "bassano del grappa": "VI", "schio": "VI", "valdagno": "VI", "arzignano": "VI", "montecchio maggiore": "VI",
+        "chioggia": "VE", "san donà di piave": "VE", "jesolo": "VE", "portogruaro": "VE",
+        "rovigo": "RO", "adria": "RO", "badia polesine": "RO",
+        "villafranca di verona": "VR", "san giovanni lupatoto": "VR", "bovolone": "VR", "san bonifacio": "VR"
     };
 
     function excelDateToJS(serial) {
@@ -165,8 +170,8 @@
                             <div style="font-size:11px; color:#999; margin-bottom:5px">Segnalazione del ${dataFormattata || "-"}</div>
                             <table class="popup-table">
                                 <tr><td class="label">Località:</td><td class="val">${loc || "-"}</td></tr>
-                                <tr><td class="label">Provincia:</td><td class="val">${prov || "-"}</td></tr>
                                 <tr><td class="label">Comune:</td><td class="val">${com}</td></tr>
+                                <tr><td class="label">Provincia:</td><td class="val">${prov || "-"}</td></tr>
                                 <tr><td class="label">Stato:</td><td class="val">${r[m.st] || "-"}</td></tr>
                                 <tr><td class="label">Condizioni:</td><td class="val">${r[m.nt] || "-"}</td></tr>
                             </table>

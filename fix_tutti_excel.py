@@ -1,108 +1,82 @@
-import pandas as pd
-import urllib.request
-import urllib.parse
 import json
-import time
 import os
-import numpy as np
+import shutil
+from openpyxl import load_workbook
 
-USER_AGENT = "BatMapsFixer/3.0"
-EMAIL = "marcello.consolo@gmail.com"
+def fix_excel_files():
+    years = [2022, 2023, 2024, 2025]
+    json_path = 'app/src/main/assets/comuni_italiani.json'
 
-# Mappa comuni -> Provincia (Sigla)
-PROV_MAP = {
-    'vicenza': 'VI', 'bassano': 'VI', 'thiene': 'VI', 'schio': 'VI', 'montecchio': 'VI', 'arzignano': 'VI', 'valdagno': 'VI',
-    'marostica': 'VI', 'recoaro': 'VI', 'santorso': 'VI', 'caltrano': 'VI', 'altavilla': 'VI', 'creazzo': 'VI', 'torri di quartesolo': 'VI',
-    'barbarano': 'VI', 'barbarno': 'VI', 'mossano': 'VI', 'quinto vicentino': 'VI', 'bolzano vicentino': 'VI',
-    'padova': 'PD', 'abano': 'PD', 'selvazzano': 'PD', 'vigonza': 'PD', 'cittadella': 'PD', 'monselice': 'PD', 'este': 'PD',
-    'albignasego': 'PD', 'rubano': 'PD', 'ponte san nicolo': 'PD', 'san martino di lupari': 'PD',
-    'venezia': 'VE', 'mestre': 'VE', 'chioggia': 'VE', 'san dona': 'VE', 'jesolo': 'VE', 'portogruaro': 'VE', 'mirano': 'VE', 'spinea': 'VE',
-    'verona': 'VR', 'villafranca': 'VR', 'san giovanni lupatoto': 'VR', 'san bonifacio': 'VR', 'bussolengo': 'VR',
-    'treviso': 'TV', 'conegliano': 'TV', 'castelfranco': 'TV', 'montebelluna': 'TV', 'vittorio veneto': 'TV', 'mogliano': 'TV',
-    'rovigo': 'RO', 'adria': 'RO', 'porto viro': 'RO',
-    'belluno': 'BL', 'feltre': 'BL'
-}
+    if not os.path.exists(json_path):
+        print(f"Errore: {json_path} non trovato.")
+        return
 
-def get_prov_sigla(comune):
-    c = str(comune).lower()
-    for key, sigla in PROV_MAP.items():
-        if key in c: return sigla
-    return ""
+    # Carica database comuni
+    with open(json_path, encoding='utf-8') as f:
+        db_comuni = json.load(f)
 
-def get_coords(loc, com):
-    try:
-        com_clean = com.replace("Barbarno", "Barbarano")
-        query = f"{loc}, {com_clean}" if loc and str(loc).lower() != str(com_clean).lower() else com_clean
-        url = f"https://nominatim.openstreetmap.org/search?q={urllib.parse.quote(query)}&format=json&limit=1&email={EMAIL}"
-        req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read().decode())
-            if data: return float(data[0]['lat']), float(data[0]['lon'])
-    except: pass
-    return None, None
+    for year in years:
+        file_name = f'Pipistrelli {year}.xlsx'
+        if not os.path.exists(file_name):
+            print(f"Salto {file_name}: non trovato.")
+            continue
 
-def fix_excel(filename):
-    if not os.path.exists(filename): return
-    print(f"\n--- Analisi: {filename} ---")
-    df = pd.read_excel(filename)
+        print(f"--- Elaborazione {file_name} ---")
+        # Backup
+        shutil.copy(file_name, f'{file_name}.bak')
 
-    # Normalizzazione nomi colonne
-    cols_orig = {str(c).lower(): c for c in df.columns}
-    c_com = next((cols_orig[k] for k in cols_orig if 'comune' in k), 'Comune')
-    c_loc = next((cols_orig[k] for k in cols_orig if 'localit' in k), 'Località')
-    c_prov = next((cols_orig[k] for k in cols_orig if 'provin' in k), 'Provincia')
-    c_lat = next((cols_orig[k] for k in cols_orig if 'lat' in k), 'Latitudine')
-    c_lon = next((cols_orig[k] for k in cols_orig if 'lon' in k), 'Longitudine')
+        wb = load_workbook(file_name)
+        ws = wb.active
 
-    # Forza tipi di dato per evitare errori
-    if c_prov not in df.columns: df[c_prov] = ""
-    df[c_prov] = df[c_prov].astype(str).replace('nan', '')
-    if c_lat not in df.columns: df[c_lat] = np.nan
-    if c_lon not in df.columns: df[c_lon] = np.nan
+        # Trova intestazioni
+        header_row = 1
+        col_map = {}
+        for r in range(1, 10):
+            row_vals = [str(ws.cell(row=r, column=c).value).lower() for c in range(1, ws.max_column + 1)]
+            if any('specie' in x or 'comune' in x for x in row_vals):
+                header_row = r
+                for c in range(1, ws.max_column + 1):
+                    val = str(ws.cell(row=r, column=c).value).lower()
+                    if 'specie' in val: col_map['specie'] = c
+                    if 'comune' in val or 'citt' in val: col_map['comune'] = c
+                    if 'prov' in val or val == 'pr': col_map['prov'] = c
+                    if 'localit' in val or 'indirizzo' in val: col_map['loc'] = c
+                    if 'lat' in val: col_map['lat'] = c
+                    if 'lon' in val or 'lng' in val: col_map['lon'] = c
+                break
 
-    count_p = 0
-    count_c = 0
+        if 'comune' not in col_map:
+            print(f"Errore: colonna Comune non trovata in {file_name}")
+            continue
 
-    for idx, row in df.iterrows():
-        com = str(row.get(c_com, '')).strip()
-        loc = str(row.get(c_loc, '')).strip()
-        if not com or com == 'nan' or com == "": continue
+        count = 0
+        for r in range(header_row + 1, ws.max_row + 1):
+            comune = str(ws.cell(row=r, column=col_map['comune']).value or "").strip().lower()
+            prov_cell = ws.cell(row=r, column=col_map.get('prov', 100)) # fallback se manca colonna
 
-        # 1. Sigla Provincia
-        sigla_attuale = str(row.get(c_prov, '')).strip()
-        if len(sigla_attuale) != 2:
-            sigla_nuova = get_prov_sigla(com)
-            if sigla_nuova:
-                df.at[idx, c_prov] = sigla_nuova
-                count_p += 1
+            # Se la provincia è vuota, la cerchiamo nel DB
+            if comune in db_comuni:
+                info = db_comuni[comune]
+                # Se la colonna provincia esiste ed è vuota, la riempiamo
+                if 'prov' in col_map:
+                    curr_prov = str(ws.cell(row=r, column=col_map['prov']).value or "").strip()
+                    if curr_prov in ['', 'None', 'nan', '-']:
+                        ws.cell(row=r, column=col_map['prov']).value = info['prov'].upper()
+                        count += 1
 
-        # 2. Coordinate
-        cur_lat = row.get(c_lat)
-        if pd.isna(cur_lat) or cur_lat == 0:
-            print(f"  [{idx+1}] Cerco GPS per: {com} {loc}...", end="\r")
-            lat, lon = get_coords(loc, com)
-            if not lat and loc: lat, lon = get_coords("", com)
+                # Se mancano le coordinate, mettiamo quelle del comune
+                if 'lat' in col_map and ws.cell(row=r, column=col_map['lat']).value is None:
+                    ws.cell(row=r, column=col_map['lat']).value = info['lat']
+                if 'lon' in col_map and ws.cell(row=r, column=col_map['lon']).value is None:
+                    ws.cell(row=r, column=col_map['lon']).value = info['lon']
 
-            if lat:
-                df.at[idx, c_lat] = lat
-                df.at[idx, c_lon] = lon
-                count_c += 1
-                time.sleep(1.2)
+        wb.save(file_name)
+        # Copia anche in assets e web
+        shutil.copy(file_name, f'app/src/main/assets/{file_name}')
+        if os.path.exists('web'):
+            shutil.copy(file_name, f'web/{file_name}')
 
-    df.to_excel(filename, index=False)
-    print(f"  Fatto! {filename}: Province aggiornate: {count_p}, Coordinate trovate: {count_c}")
+        print(f"Completato {file_name}: aggiunte {count} province.")
 
-for y in [2022, 2023, 2024, 2025]:
-    fix_excel(f"Pipistrelli {y}.xlsx")
-
-# Sync finale
-print("\nSincronizzazione file...")
-for y in [2022, 2023, 2024, 2025]:
-    f = f"Pipistrelli {y}.xlsx"
-    if os.path.exists(f):
-        import shutil
-        os.makedirs("app/src/main/assets", exist_ok=True)
-        os.makedirs("web", exist_ok=True)
-        shutil.copy2(f, f"app/src/main/assets/{f}")
-        shutil.copy2(f, f"web/{f}")
-        print(f"  OK: {f}")
+if __name__ == "__main__":
+    fix_excel_files()

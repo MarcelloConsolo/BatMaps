@@ -216,11 +216,11 @@ fun OSMMapView(punti: List<Pair<Segnalazione, GeoPoint>>) {
             }
             marker.icon.mutate().setTint(color)
             
-            // Ordine popup richiesto: Località in cima, poi Provincia
+            // Ordine popup richiesto: Località, Comune, Provincia
             marker.snippet = "Località: ${info.localita}\n" +
+                           "Comune: ${info.comune}\n" +
                            "Provincia: ${info.prov}\n" +
                            "Data: ${info.data}\n" +
-                           "Comune: ${info.comune}\n" +
                            "Stato: ${info.stato}\n" +
                            "Condizioni: ${info.note}"
             
@@ -266,7 +266,7 @@ suspend fun leggiExcelIncrementale(
         val colMap = mutableMapOf<String, Int>()
         for (j in 0 until (headerRow?.lastCellNum?.toInt() ?: 0)) {
             val cell = headerRow?.getCell(j) ?: continue
-            val name = formatter.formatCellValue(cell).lowercase().trim()
+            val name = formatter.formatCellValue(cell).lowercase().replace("\n", " ").trim()
             
             if (name.contains("specie")) colMap["specie"] = j
             if (name.contains("data")) colMap["data"] = j

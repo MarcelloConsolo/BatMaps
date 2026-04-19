@@ -196,8 +196,13 @@ fun OSMMapView(punti: List<Pair<Segnalazione, GeoPoint>>) {
         punti.forEach { (info, coordinata) ->
             val marker = Marker(mapView)
             marker.position = coordinata
-            // Titolo con Specie e Provincia subito sotto (nel snippet)
-            marker.title = info.specie
+            
+            // Titolo in Blu (HTML)
+            marker.title = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                android.text.Html.fromHtml("<font color='#0000FF'><b>${info.specie}</b></font>", android.text.Html.FROM_HTML_MODE_LEGACY).toString()
+            } else {
+                info.specie
+            }
             
             val color = when {
                 info.stato.lowercase().contains("liberato") -> android.graphics.Color.GREEN
@@ -345,12 +350,17 @@ suspend fun leggiExcelIncrementale(
                     }
                 } ?: ""
                 val specieStr = colMap["specie"]?.let { formatter.formatCellValue(row.getCell(it)) } ?: "Pipistrello"
+                
+                // RICAVO LA PROVINCIA DAL DB LOCALE (come richiesto)
+                val localResult = ComuniDatabase.cercaDati(comRaw, locRaw, provRaw)
+                val finalProv = if (provRaw.isBlank()) localResult.prov else provRaw
+                
                 val statoStr = colMap["stato"]?.let { formatter.formatCellValue(row.getCell(it)) } ?: ""
                 val noteStr = colMap["note"]?.let { formatter.formatCellValue(row.getCell(it)) } ?: ""
 
                 val point = Pair(
                     Segnalazione(
-                        dataStr, specieStr, locRaw, comRaw, provRaw, statoStr, noteStr,
+                        dataStr, specieStr, locRaw, comRaw, finalProv, statoStr, noteStr,
                         finalCoords.first, finalCoords.second, anno
                     ),
                     GeoPoint(finalCoords.first, finalCoords.second)

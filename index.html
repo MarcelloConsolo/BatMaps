@@ -58,7 +58,7 @@
     <select id="specie-select">
         <option value="all">Tutte le specie</option>
     </select>
-    <div class="total-count" id="total-val">Visualizzate: 0</div>
+    <div class="total-count" id="total-val">Segnalazioni: 0</div>
 </div>
 
 <div class="legenda">
@@ -108,7 +108,7 @@
                 map.removeLayer(item.marker);
             }
         });
-        document.getElementById("total-val").innerText = "Visualizzate: " + visibleCount;
+        document.getElementById("total-val").innerText = "Segnalazioni: " + visibleCount;
     }
 
     function excelDateToJS(serial) {

@@ -196,16 +196,15 @@
                         specieSelect.value = "all";
                     }
 
-                    // Logica di spostamento (spiral jitter)
+                    // Logica di spostamento (spiral jitter) per marker sovrapposti
                     let finalLat = lat;
                     let finalLon = lon;
-                    // Uso 4 decimali per il raggruppamento (~10 metri) per catturare punti "quasi" identici
                     const groupKey = lat.toFixed(4) + "," + lon.toFixed(4);
 
                     if (occupiedPositions[groupKey]) {
                         const count = occupiedPositions[groupKey];
                         const angle = count * 0.8;
-                        const radius = 0.0004 * count; // Aumentato raggio per visibilità
+                        const radius = 0.00005 * count; // Ridotto drasticamente per rendere i marker quasi sovrapposti
                         finalLat += Math.cos(angle) * radius;
                         finalLon += Math.sin(angle) * radius;
                         occupiedPositions[groupKey]++;

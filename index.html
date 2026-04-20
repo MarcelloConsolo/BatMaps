@@ -58,6 +58,30 @@
         .dot { width: 8px; height: 8px; background: #2ecc71; border-radius: 50%; margin-right: 6px; flex-shrink: 0; }
         .total-count { font-weight: bold; font-size: 14px; color: #27ae60; margin-top: 4px; white-space: nowrap; }
 
+        /* Ottimizzazione per Mobile */
+        @media (max-width: 600px) {
+            .stats-box {
+                top: 5px;
+                right: 5px;
+                padding: 5px 8px;
+                z-index: 2000; /* Forza sopra tutto */
+                max-width: 160px;
+            }
+            .stats-title { font-size: 12px; }
+            .stats-title img { width: 14px; }
+            .sync-status { font-size: 10px; }
+            .total-count { font-size: 11px; }
+            select { font-size: 11px; max-width: 140px; margin-top: 4px; }
+
+            .legenda {
+                bottom: 20px;
+                left: 5px;
+                padding: 8px;
+                font-size: 10px;
+                max-width: 150px;
+            }
+        }
+
         select {
             margin-top: 8px; display: block; padding: 4px; font-size: 13px;
             border: 1px solid #ddd; border-radius: 4px; background: #f9f9f9;

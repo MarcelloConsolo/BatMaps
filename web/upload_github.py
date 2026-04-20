@@ -18,18 +18,17 @@ def upload_to_github():
     print(f"--- USANDO GIT DA: {git_path} ---")
 
     # Ci spostiamo nella root del progetto (una cartella sopra 'web')
-    # così il comando 'git add .' prende tutto, incluso index.html
     os.chdir(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     print(f"--- LAVORO NELLA DIRECTORY: {os.getcwd()} ---")
 
     try:
-        # Sincronizza prima di caricare per evitare errori di "rejected"
-        print("Sincronizzazione (pull)...")
-        subprocess.run([git_path, "pull", "origin", "main", "--rebase"], check=False)
-
-        # Aggiunge tutto
+        # Aggiunge tutto subito per evitare problemi col pull/rebase
         print("Aggiunta file...")
         subprocess.run([git_path, "add", "."], check=True)
+
+        # Sincronizza prima di caricare
+        print("Sincronizzazione (pull)...")
+        subprocess.run([git_path, "pull", "origin", "main", "--rebase"], check=False)
 
         # Commit
         print("Commit...")

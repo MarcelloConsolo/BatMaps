@@ -199,16 +199,18 @@
                     // Logica di spostamento (spiral jitter)
                     let finalLat = lat;
                     let finalLon = lon;
-                    const posKey = lat.toFixed(6) + "," + lon.toFixed(6);
-                    if (occupiedPositions[posKey]) {
-                        const count = occupiedPositions[posKey];
+                    // Uso 4 decimali per il raggruppamento (~10 metri) per catturare punti "quasi" identici
+                    const groupKey = lat.toFixed(4) + "," + lon.toFixed(4);
+
+                    if (occupiedPositions[groupKey]) {
+                        const count = occupiedPositions[groupKey];
                         const angle = count * 0.8;
-                        const radius = 0.00015 * count; // Spostamento leggero ma visibile
+                        const radius = 0.0004 * count; // Aumentato raggio per visibilità
                         finalLat += Math.cos(angle) * radius;
                         finalLon += Math.sin(angle) * radius;
-                        occupiedPositions[posKey]++;
+                        occupiedPositions[groupKey]++;
                     } else {
-                        occupiedPositions[posKey] = 1;
+                        occupiedPositions[groupKey] = 1;
                     }
 
                     const icon = new L.Icon({

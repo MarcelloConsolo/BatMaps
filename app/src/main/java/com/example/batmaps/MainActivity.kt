@@ -81,12 +81,24 @@ fun BatMapScreen() {
     val tutteLeSegnalazioni = remember { mutableStateListOf<Pair<Segnalazione, GeoPoint>>() }
     var isLoading by remember { mutableStateOf(true) }
     var statusMessage by remember { mutableStateOf("Inizializzazione...") }
+    var selectedYear by remember { mutableStateOf("Tutte le segnalazioni") }
+    var expanded by remember { mutableStateOf(false) }
+    val availableYears = remember { mutableStateListOf<String>() }
     
     LaunchedEffect(Unit) {
         ComuniDatabase.initialize(context)
-        val years = listOf(2022, 2023, 2024, 2025)
         
-        for (year in years) {
+        // Cerca i file Excel negli assets per determinare gli anni
+        val assets = context.assets.list("") ?: emptyArray()
+        val yearsFound = assets.filter { it.startsWith("Pipistrelli") && it.endsWith(".xlsx") }
+            .mapNotNull { it.replace("Pipistrelli ", "").replace(".xlsx", "").toIntOrNull() }
+            .sortedDescending()
+        
+        availableYears.clear()
+        availableYears.add("Tutte le segnalazioni")
+        yearsFound.forEach { availableYears.add("Segnalazioni $it") }
+
+        for (year in yearsFound.sorted()) {
             val fileName = "Pipistrelli $year.xlsx"
             statusMessage = "Caricamento $fileName..."
             try {
@@ -102,12 +114,21 @@ fun BatMapScreen() {
         statusMessage = "Caricamento completato (${tutteLeSegnalazioni.size} punti)"
     }
 
+    val visualizzate = remember(selectedYear, tutteLeSegnalazioni.size) {
+        if (selectedYear == "Tutte le segnalazioni") {
+            tutteLeSegnalazioni.toList()
+        } else {
+            val yearInt = selectedYear.replace("Segnalazioni ", "").toIntOrNull() ?: 0
+            tutteLeSegnalazioni.filter { it.first.anno == yearInt }
+        }
+    }
+
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
             // 1. LA MAPPA
-            OSMMapView(tutteLeSegnalazioni.toList())
+            OSMMapView(visualizzate)
 
-            // 2. FINESTRA STATISTICHE (Top Right - come da immagine)
+            // 2. FINESTRA STATISTICHE E FILTRO (Top Right)
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -123,13 +144,35 @@ fun BatMapScreen() {
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
                     )
+                    
+                    // MENU A TENDINA PER ANNO
+                    Box {
+                        TextButton(onClick = { expanded = true }, contentPadding = PaddingValues(0.dp)) {
+                            Text(text = "$selectedYear ▼", style = MaterialTheme.typography.bodyMedium)
+                        }
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            availableYears.forEach { yearStr ->
+                                DropdownMenuItem(
+                                    text = { Text(yearStr) },
+                                    onClick = {
+                                        selectedYear = yearStr
+                                        expanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(modifier = Modifier.size(10.dp), color = Color(0xFF2ecc71), shape = MaterialTheme.shapes.extraSmall) {}
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(text = "Sincronizzato", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
                     Text(
-                        text = "Totale: ${tutteLeSegnalazioni.size}",
+                        text = "Visualizzate: ${visualizzate.size}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFF27ae60),
                         fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
